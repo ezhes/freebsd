@@ -210,6 +210,8 @@ pmap_vmspace_copy(pmap_t dst_pmap __unused, pmap_t src_pmap __unused)
 	return (0);
 }
 
+uint64_t pmap_dispatch(void* call);
+
 #endif	/* _KERNEL */
 
 #endif	/* !LOCORE */

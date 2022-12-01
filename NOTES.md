@@ -77,3 +77,10 @@ vm_phys
 
 struct vmspace { !! owns pmap
 PMAP_LOCK_INIT(
+
+## Weird things
+
+Are #define macros used unzoned?
+
+Find definition of `pmap_mapdev_attr(vm_offset_t pa`, `pmap_mapdev(vm_offset_t`, `pmap_unmapdev(vm_offset_t`.
+What to do with extern fn's `pmap_clean_stage2_tlbi` and `pmap_invalidate_vpipt_icache`?

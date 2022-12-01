@@ -602,14 +602,14 @@ pmap_pte(pmap_t pmap, vm_offset_t va, int *level)
 }
 
 bool
-pmap_ps_enabled(pmap_t pmap __unused)
+pmap_ps_enabled_zoned(pmap_t pmap __unused)
 {
 
 	return (superpages_enabled != 0);
 }
 
 bool
-pmap_get_tables(pmap_t pmap, vm_offset_t va, pd_entry_t **l0, pd_entry_t **l1,
+pmap_get_tables_zoned(pmap_t pmap, vm_offset_t va, pd_entry_t **l0, pd_entry_t **l1,
     pd_entry_t **l2, pt_entry_t **l3)
 {
 	pd_entry_t *l0p, *l1p, *l2p;
@@ -934,7 +934,7 @@ pmap_bootstrap_l3(vm_offset_t l1pt, vm_offset_t va, vm_offset_t l3_start)
  *	Bootstrap the system enough to run with virtual memory.
  */
 void
-pmap_bootstrap(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
+pmap_bootstrap_zoned(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
     vm_size_t kernlen)
 {
 	vm_offset_t freemempos;
@@ -1360,7 +1360,7 @@ pmap_extract_and_hold(pmap_t pmap, vm_offset_t va, vm_prot_t prot)
  * physical address in pa if it is not NULL.
  */
 bool
-pmap_klookup(vm_offset_t va, vm_paddr_t *pa)
+pmap_klookup_zoned(vm_offset_t va, vm_paddr_t *pa)
 {
 	pt_entry_t *pte, tpte;
 	register_t intr;
@@ -1424,14 +1424,14 @@ pmap_klookup(vm_offset_t va, vm_paddr_t *pa)
 }
 
 vm_paddr_t
-pmap_kextract(vm_offset_t va)
+pmap_kextract_zoned(vm_offset_t va)
 {
 	vm_paddr_t pa;
 
 	if (va >= DMAP_MIN_ADDRESS && va < DMAP_MAX_ADDRESS)
 		return (DMAP_TO_PHYS(va));
 
-	if (pmap_klookup(va, &pa) == false)
+	if (pmap_klookup_zoned(va, &pa) == false)
 		return (0);
 	return (pa);
 }
@@ -1441,7 +1441,7 @@ pmap_kextract(vm_offset_t va)
  ***************************************************/
 
 void
-pmap_kenter(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode)
+pmap_kenter_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode)
 {
 	pd_entry_t *pde;
 	pt_entry_t *pte, attr;
@@ -1475,17 +1475,17 @@ pmap_kenter(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode)
 }
 
 void
-pmap_kenter_device(vm_offset_t sva, vm_size_t size, vm_paddr_t pa)
+pmap_kenter_device_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa)
 {
 
-	pmap_kenter(sva, size, pa, VM_MEMATTR_DEVICE);
+	pmap_kenter_zoned(sva, size, pa, VM_MEMATTR_DEVICE);
 }
 
 /*
  * Remove a page from the kernel pagetables.
  */
 PMAP_INLINE void
-pmap_kremove(vm_offset_t va)
+pmap_kremove_zoned(vm_offset_t va)
 {
 	pt_entry_t *pte;
 	int lvl;
@@ -1499,7 +1499,7 @@ pmap_kremove(vm_offset_t va)
 }
 
 void
-pmap_kremove_device(vm_offset_t sva, vm_size_t size)
+pmap_kremove_device_zoned(vm_offset_t sva, vm_size_t size)
 {
 	pt_entry_t *pte;
 	vm_offset_t va;
@@ -1764,7 +1764,7 @@ pmap_pinit0(pmap_t pmap)
 }
 
 int
-pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
+pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 {
 	vm_page_t m;
 
@@ -1817,7 +1817,7 @@ int
 pmap_pinit(pmap_t pmap)
 {
 
-	return (pmap_pinit_stage(pmap, PM_STAGE1, 4));
+	return (pmap_pinit_stage_zoned(pmap, PM_STAGE1, 4));
 }
 
 /*
@@ -3700,7 +3700,7 @@ restart:
  * Add a single SMMU entry. This function does not sleep.
  */
 int
-pmap_senter(pmap_t pmap, vm_offset_t va, vm_paddr_t pa,
+pmap_senter_zoned(pmap_t pmap, vm_offset_t va, vm_paddr_t pa,
     vm_prot_t prot, u_int flags)
 {
 	pd_entry_t *pde;
@@ -3763,7 +3763,7 @@ out:
  * Remove a single SMMU entry.
  */
 int
-pmap_sremove(pmap_t pmap, vm_offset_t va)
+pmap_sremove_zoned(pmap_t pmap, vm_offset_t va)
 {
 	pt_entry_t *pte;
 	int lvl;
@@ -3793,7 +3793,7 @@ pmap_sremove(pmap_t pmap, vm_offset_t va)
  * this function panics.
  */
 void
-pmap_sremove_pages(pmap_t pmap)
+pmap_sremove_pages_zoned(pmap_t pmap)
 {
 	pd_entry_t l0e, *l1, l1e, *l2, l2e;
 	pt_entry_t *l3, l3e;
@@ -4195,7 +4195,7 @@ validate:
 	 * that is incorrect a stage 2 pmap.
 	 */
 	if ((mpte == NULL || mpte->ref_count == NL3PG) &&
-	    pmap_ps_enabled(pmap) && pmap->pm_stage == PM_STAGE1 &&
+	    pmap_ps_enabled_zoned(pmap) && pmap->pm_stage == PM_STAGE1 &&
 	    (m->flags & PG_FICTITIOUS) == 0 &&
 	    vm_reserv_level_iffullpop(m) == 0) {
 		pmap_promote_l2(pmap, pde, va, &lock);
@@ -4418,7 +4418,7 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 	while (m != NULL && (diff = m->pindex - m_start->pindex) < psize) {
 		va = start + ptoa(diff);
 		if ((va & L2_OFFSET) == 0 && va + L2_SIZE <= end &&
-		    m->psind == 1 && pmap_ps_enabled(pmap) &&
+		    m->psind == 1 && pmap_ps_enabled_zoned(pmap) &&
 		    pmap_enter_2mpage(pmap, va, m, prot, &lock))
 			m = &m[L2_SIZE / PAGE_SIZE - 1];
 		else
@@ -5089,7 +5089,7 @@ restart:
  * a 2mpage.  Otherwise, returns false.
  */
 bool
-pmap_page_is_mapped(vm_page_t m)
+pmap_page_is_mapped_zoned(vm_page_t m)
 {
 	struct rwlock *lock;
 	bool rv;
@@ -5903,7 +5903,7 @@ restart:
 }
 
 void *
-pmap_mapbios(vm_paddr_t pa, vm_size_t size)
+pmap_mapbios_zoned(vm_paddr_t pa, vm_size_t size)
 {
 	struct pmap_preinit_mapping *ppim;
 	vm_offset_t va, offset;
@@ -6003,14 +6003,14 @@ pmap_mapbios(vm_paddr_t pa, vm_size_t size)
 		/* L3 table is linked */
 		va = trunc_page(va);
 		pa = trunc_page(pa);
-		pmap_kenter(va, size, pa, memory_mapping_mode(pa));
+		pmap_kenter_zoned(va, size, pa, memory_mapping_mode(pa));
 	}
 
 	return ((void *)(va + offset));
 }
 
 void
-pmap_unmapbios(vm_offset_t va, vm_size_t size)
+pmap_unmapbios_zoned(vm_offset_t va, vm_size_t size)
 {
 	struct pmap_preinit_mapping *ppim;
 	vm_offset_t offset, tmpsize, va_trunc;
@@ -6069,7 +6069,7 @@ pmap_unmapbios(vm_offset_t va, vm_size_t size)
 
 		/* Unmap and invalidate the pages */
                 for (tmpsize = 0; tmpsize < size; tmpsize += PAGE_SIZE)
-			pmap_kremove(va + tmpsize);
+			pmap_kremove_zoned(va + tmpsize);
 
 		kva_free(va, size);
 	}
@@ -6079,7 +6079,7 @@ pmap_unmapbios(vm_offset_t va, vm_size_t size)
  * Sets the memory attribute for the specified page.
  */
 void
-pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma)
+pmap_page_set_memattr_zoned(vm_page_t m, vm_memattr_t ma)
 {
 
 	m->md.pv_memattr = ma;
@@ -6090,7 +6090,7 @@ pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma)
 	 * required for data coherence.
 	 */
 	if ((m->flags & PG_FICTITIOUS) == 0 &&
-	    pmap_change_attr(PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m)), PAGE_SIZE,
+	    pmap_change_attr_zoned(PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m)), PAGE_SIZE,
 	    m->md.pv_memattr) != 0)
 		panic("memory attribute change on the direct map failed");
 }
@@ -6115,7 +6115,7 @@ pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma)
  * virtual address range or the direct map.
  */
 int
-pmap_change_attr(vm_offset_t va, vm_size_t size, int mode)
+pmap_change_attr_zoned(vm_offset_t va, vm_size_t size, int mode)
 {
 	int error;
 
@@ -6133,7 +6133,7 @@ pmap_change_attr(vm_offset_t va, vm_size_t size, int mode)
  * map are never executable.
  */
 int
-pmap_change_prot(vm_offset_t va, vm_size_t size, vm_prot_t prot)
+pmap_change_prot_zoned(vm_offset_t va, vm_size_t size, vm_prot_t prot)
 {
 	int error;
 
@@ -6347,7 +6347,7 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 	    (oldl1 & ~ATTR_DESCR_MASK) | L2_BLOCK));
 
 	if (tmpl1 != 0) {
-		pmap_kenter(tmpl1, PAGE_SIZE,
+		pmap_kenter_zoned(tmpl1, PAGE_SIZE,
 		    DMAP_TO_PHYS((vm_offset_t)l1) & ~L3_OFFSET,
 		    VM_MEMATTR_WRITE_BACK);
 		l1 = (pt_entry_t *)(tmpl1 + ((vm_offset_t)l1 & PAGE_MASK));
@@ -6357,7 +6357,7 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 
 fail:
 	if (tmpl1 != 0) {
-		pmap_kremove(tmpl1);
+		pmap_kremove_zoned(tmpl1);
 		kva_free(tmpl1, PAGE_SIZE);
 	}
 
@@ -6498,7 +6498,7 @@ pmap_demote_l2_locked(pmap_t pmap, pt_entry_t *l2, vm_offset_t va,
 	 * Map the temporary page so we don't lose access to the l2 table.
 	 */
 	if (tmpl2 != 0) {
-		pmap_kenter(tmpl2, PAGE_SIZE,
+		pmap_kenter_zoned(tmpl2, PAGE_SIZE,
 		    DMAP_TO_PHYS((vm_offset_t)l2) & ~L3_OFFSET,
 		    VM_MEMATTR_WRITE_BACK);
 		l2 = (pt_entry_t *)(tmpl2 + ((vm_offset_t)l2 & PAGE_MASK));
@@ -6533,7 +6533,7 @@ pmap_demote_l2_locked(pmap_t pmap, pt_entry_t *l2, vm_offset_t va,
 
 fail:
 	if (tmpl2 != 0) {
-		pmap_kremove(tmpl2);
+		pmap_kremove_zoned(tmpl2);
 		kva_free(tmpl2, PAGE_SIZE);
 	}
 
@@ -6718,7 +6718,7 @@ out:
  * pmap.  This value may change from time to time.
  */
 uint64_t
-pmap_to_ttbr0(pmap_t pmap)
+pmap_to_ttbr0_zoned(pmap_t pmap)
 {
 
 	return (ASID_TO_OPERAND(COOKIE_TO_ASID(pmap->pm_cookie)) |
@@ -6765,7 +6765,7 @@ pmap_activate_int(pmap_t pmap)
 		pmap_alloc_asid(pmap);
 
 	if (pmap->pm_stage == PM_STAGE1) {
-		set_ttbr0(pmap_to_ttbr0(pmap));
+		set_ttbr0(pmap_to_ttbr0_zoned(pmap));
 		if (PCPU_GET(bcast_tlbi_workaround) != 0)
 			invalidate_local_icache();
 	}
@@ -6773,7 +6773,7 @@ pmap_activate_int(pmap_t pmap)
 }
 
 void
-pmap_activate_vm(pmap_t pmap)
+pmap_activate_vm_zoned(pmap_t pmap)
 {
 
 	PMAP_ASSERT_STAGE2(pmap);
@@ -6798,7 +6798,7 @@ pmap_activate(struct thread *td)
  * to cpu_switch().
  */
 struct pcb *
-pmap_switch(struct thread *old __unused, struct thread *new)
+pmap_switch_zoned(struct thread *old __unused, struct thread *new)
 {
 	pcpu_bp_harden bp_harden;
 	struct pcb *pcb;
@@ -6938,7 +6938,7 @@ fault_exec:
 }
 
 int
-pmap_fault(pmap_t pmap, uint64_t esr, uint64_t far)
+pmap_fault_zoned(pmap_t pmap, uint64_t esr, uint64_t far)
 {
 	pt_entry_t pte, *ptep;
 	register_t intr;
@@ -7011,7 +7011,7 @@ pmap_fault(pmap_t pmap, uint64_t esr, uint64_t far)
 			 * critical section.  Therefore, we must check the
 			 * address without acquiring the kernel pmap's lock.
 			 */
-			if (pmap_klookup(far, NULL))
+			if (pmap_klookup_zoned(far, NULL))
 				rv = KERN_SUCCESS;
 		} else {
 			PMAP_LOCK(pmap);
@@ -7076,7 +7076,7 @@ pmap_align_superpage(vm_object_t object, vm_ooffset_t offset,
  *
  */
 boolean_t
-pmap_map_io_transient(vm_page_t page[], vm_offset_t vaddr[], int count,
+pmap_map_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
     boolean_t can_fault)
 {
 	vm_paddr_t paddr;
@@ -7118,7 +7118,7 @@ pmap_map_io_transient(vm_page_t page[], vm_offset_t vaddr[], int count,
 }
 
 void
-pmap_unmap_io_transient(vm_page_t page[], vm_offset_t vaddr[], int count,
+pmap_unmap_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
     boolean_t can_fault)
 {
 	vm_paddr_t paddr;
@@ -7381,3 +7381,323 @@ SYSCTL_OID(_vm_pmap, OID_AUTO, kernel_maps,
     CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE | CTLFLAG_SKIP,
     NULL, 0, sysctl_kmaps, "A",
     "Dump kernel address layout");
+
+/*
+ * unzoned calls into priveleged instructions
+ */
+
+#define ZONE_STATE_PMAP TODO_IMPORT
+
+enum pmap_external_fn {
+	pmap_enum_page_set_memattr,
+	pmap_enum_activate_vm,
+	pmap_enum_bootstrap,
+	pmap_enum_change_attr,
+	pmap_enum_change_prot,
+	pmap_enum_kenter,
+	pmap_enum_kenter_device,
+	pmap_enum_klookup,
+	pmap_enum_kextract,
+	pmap_enum_kremove,
+	pmap_enum_kremove_device,
+	// pmap_enum_mapdev_attr,
+	pmap_enum_page_is_mapped,
+	pmap_enum_pinit_stage,
+	pmap_enum_ps_enabled,
+	pmap_enum_to_ttbr0,
+
+	// pmap_enum_mapdev,
+	pmap_enum_mapbios,
+	// pmap_enum_unmapdev,
+	pmap_enum_unmapbios,
+
+	pmap_enum_map_io_transient,
+	pmap_enum_unmap_io_transient,
+
+	pmap_enum_get_tables,
+
+	pmap_enum_fault,
+
+	pmap_enum_senter,
+	pmap_enum_sremove,
+	pmap_enum_sremove_pages,
+
+	pmap_enum_switch
+}
+
+struct pmap_call {
+	enum pmap_external_fn func;
+	uint64_t args[];
+};
+
+uint64_t
+pmap_dispatch(void* call_uncasted)
+{
+	struct pmap_call *call = (struct pmap_call *) call_uncasted;
+	switch(call->func) {
+		case pmap_enum_page_set_memattr:
+			pmap_page_set_memattr_zoned((vm_page_t) call->args[0], (vm_memattr_t) call->args[1]);
+			return NULL;
+		case pmap_enum_activate_vm:
+			pmap_activate_vm_zoned((pmap_t) call->args[0]);
+			return NULL;
+		case pmap_enum_bootstrap:
+			pmap_bootstrap_zoned((vm_offset_t) call->args[0], (vm_offset_t) call->args[1], (vm_paddr_t) call->args[2], (vm_size_t) call->args[3]);
+			return NULL;
+		case pmap_enum_change_attr:
+			return (uint64_t) pmap_change_attr_zoned((vm_offset_t) call->args[0], (vm_size_t) call->args[1], (int) call->args[2]);
+		case pmap_enum_change_prot:
+			return (uint64_t) pmap_change_prot_zoned((vm_offset_t) call->args[0], (vm_size_t) call->args[1], (vm_size_t) call->args[2]);
+		case pmap_enum_kenter:
+			pmap_kenter_zoned((vm_offset_t) call->args[0], (vm_size_t) call->args[1], (vm_paddr_t) call->args[2], (int) call->args[3]);
+			return NULL;
+		case pmap_enum_kenter_device:
+			pmap_kenter_device_zoned((vm_offset_t) call->args[0], (vm_size_t) call->args[1], (vm_paddr_t) call->args[2]);
+			return NULL;
+		case pmap_enum_klookup:
+			return (uint64_t) pmap_klookup_zoned((vm_offset_t) call->args[0], (vm_paddr_t *) call->args[1]);
+		case pmap_enum_kextract:
+			return (uint64_t) pmap_kextract_zoned((vm_offset_t) call->args[0]);
+		case pmap_enum_kremove:
+			pmap_kremove_zoned((vm_offset_t) call->args[0]);
+			return NULL;
+		case pmap_enum_kremove_device:
+			pmap_kremove_device_zoned((vm_offset_t) call->args[0], (vm_size_t) call->args[1]);
+			return NULL;
+		// case pmap_enum_mapdev_attr:
+		case pmap_enum_page_is_mapped:
+			return (uint64_t) pmap_page_is_mapped_zoned((vm_page_t) call->args[0]);
+		case pmap_enum_pinit_stage:
+			return (uint64_t) pmap_pinit_stage_zoned((pmap_t) call->args[0], (enum pmap_stage) call->args[1], (int) call->args[2]);
+		case pmap_enum_ps_enabled:
+			return (uint64_t) pmap_ps_enabled_zoned((pmap_t) call->args[0]);
+		case pmap_enum_to_ttbr0:
+			return (uint64_t) pmap_to_ttbr0_zoned((pmap_t) call->args[0]);
+
+		// case pmap_enum_mapdev:
+		case pmap_enum_mapbios:
+			return (uint64_t) pmap_mapbios_zoned((vm_paddr_t) call->args[0], (vm_size_t) call->args[1]);
+		// case pmap_enum_unmapdev:
+		case pmap_enum_unmapbios:
+			pmap_unmapbios_zoned((vm_offset_t) call->args[0], (vm_size_t) call->args[1]);
+			return NULL;
+
+		case pmap_enum_map_io_transient:
+			return (uint64_t) pmap_map_io_transient_zoned((vm_page_t *) call->args[0], (vm_offset_t *) call->args[1], (int) call->args[2], (boolean_t) call->args[3]);
+		case pmap_enum_unmap_io_transient:
+			pmap_unmap_io_transient_zoned((vm_page_t *) call->args[0], (vm_offset_t *) call->args[1], (int) call->args[2], (boolean_t) call->args[3]);
+			return NULL;
+
+		case pmap_enum_get_tables:
+			return (uint64_t) pmap_get_tables_zoned((pmap_t) call->args[0], (vm_offset_t) call->args[1], (pd_entry_t **) call->args[2], (pd_entry_t **) call->args[3],
+			    (pd_entry_t **) call->args[4], (pt_entry_t **) call->args[5]);
+
+		case pmap_enum_fault:
+			return (uint64_t) pmap_fault_zoned((pmap_t) call->args[0], (uint64_t) call->args[1], (uint64_t) call->args[2]);
+
+		case pmap_enum_senter:
+			return (uint64_t) pmap_senter_zoned((pmap_t) call->args[0], (vm_offset_t) call->args[1], (vm_paddr_t) call->args[2], (vm_size_t) call->args[3],
+			    (u_int) call->args[4]);
+		case pmap_enum_sremove:
+			return (uint64_t) pmap_sremove_zoned((pmap_t) call->args[0], (vm_offset_t) call->args[1]);
+		case pmap_enum_sremove_pages:
+			pmap_sremove_pages_zoned((pmap_t) call->args[0]);
+			return NULL;
+
+		case pmap_enum_switch:
+			return (uint64_t) pmap_switch_zoned((struct thread *) call->args[0], (struct thread *) call->args[1]);
+	}
+}
+
+void
+pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma)
+{
+	struct pmap_call call = {pmap_enum_page_set_memattr, (uint64_t) m, (uint64_t) ma};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+void
+pmap_activate_vm(pmap_t pmap)
+{
+	struct pmap_call call = {pmap_enum_activate_vm, (uint64_t) pmap};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+void
+pmap_bootstrap(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart, vm_size_t kernlen)
+{
+	struct pmap_call call = {pmap_enum_bootstrap, (uint64_t) l0pt, (uint64_t) l1pt, (uint64_t) kernstart, (uint64_t) kernlen};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+int
+pmap_change_attr(vm_offset_t va, vm_size_t size, int mode)
+{
+	struct pmap_call call = {pmap_enum_change_attr, (uint64_t) va, (uint64_t) size, (uint64_t) mode};
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+int
+pmap_change_prot(vm_offset_t va, vm_size_t size, vm_prot_t prot)
+{
+	struct pmap_call call = {pmap_enum_change_prot, (uint64_t) va, (uint64_t) size, (uint64_t) prot};
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+void
+pmap_kenter(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode)
+{
+	struct pmap_call call = {pmap_enum_kenter, (uint64_t) sva, (uint64_t) size, (uint64_t) pa, (uint64_t) mode};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+void
+pmap_kenter_device(vm_offset_t sva, vm_size_t size, vm_paddr_t pa)
+{
+	struct pmap_call call = {pmap_enum_kenter_device, (uint64_t) sva, (uint64_t) size, (uint64_t) pa};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+bool
+pmap_klookup(vm_offset_t va, vm_paddr_t *pa)
+{
+	struct pmap_call call = {pmap_enum_klookup, (uint64_t) va, (uint64_t) pa};
+	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+vm_paddr_t
+pmap_kextract(vm_offset_t va)
+{
+	struct pmap_call call = {pmap_enum_kextract, (uint64_t) va};
+	return (vm_paddr_t) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+void
+pmap_kremove(vm_offset_t va)
+{
+	struct pmap_call call = {pmap_enum_kremove, (uint64_t) va};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+void
+pmap_kremove_device(vm_offset_t sva, vm_size_t size)
+{
+	struct pmap_call call = {pmap_enum_kremove_device, (uint64_t) sva, (uint64_t) size};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+// void	*pmap_mapdev_attr(vm_offset_t pa, vm_size_t size, vm_memattr_t ma);
+bool
+pmap_page_is_mapped(vm_page_t m)
+{
+	struct pmap_call call = {pmap_enum_page_is_mapped, (uint64_t) m};
+	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+int
+pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
+{
+	struct pmap_call call = {pmap_enum_pinit_stage, (uint64_t) pmap, (uint64_t) stage, (uint64_t) levels};
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+bool
+pmap_ps_enabled(pmap_t pmap)
+{
+	struct pmap_call call = {pmap_enum_ps_enabled, (uint64_t) pmap};
+	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+uint64_t
+pmap_to_ttbr0(pmap_t pmap)
+{
+	struct pmap_call call = {pmap_enum_to_ttbr0, (uint64_t) pmap};
+	return (uint64_t) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+
+// void	*pmap_mapdev(vm_offset_t, vm_size_t);
+void *
+pmap_mapbios(vm_paddr_t pa, vm_size_t size)
+{
+	struct pmap_call call = {pmap_enum_mapbios, (uint64_t) pa, (uint64_t) size};
+	return (void *) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+// void	pmap_unmapdev(vm_offset_t, vm_size_t);
+void
+pmap_unmapbios(vm_offset_t va, vm_size_t size)
+{
+	struct pmap_call call = {pmap_enum_unmapbios, (uint64_t) va, (uint64_t) size};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+
+boolean_t
+pmap_map_io_transient(vm_page_t *page, vm_offset_t *vaddr, int count,
+    boolean_t can_fault)
+{
+	struct pmap_call call = {pmap_enum_map_io_transient, (uint64_t) page, (uint64_t) vaddr, (uint64_t) count, (uint64_t) can_fault};
+	return (boolean_t) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+void
+pmap_unmap_io_transient(vm_page_t *page, vm_offset_t *vaddr, int count,
+    boolean_t can_fault)
+{
+	struct pmap_call call = {pmap_enum_unmap_io_transient, (uint64_t) page, (uint64_t) vaddr, (uint64_t) count, (uint64_t) can_fault};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+
+bool
+pmap_get_tables(pmap_t pmap, vm_offset_t va, pd_entry_t **l0, pd_entry_t **l1,
+    pd_entry_t **l2, pt_entry_t **l3)
+{
+	struct pmap_call call = {pmap_enum_get_tables, (uint64_t) pmap, (uint64_t) va, (uint64_t) l0, (uint64_t) l1, (uint64_t) l2, (uint64_t) l3};
+	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+
+int
+pmap_fault(pmap_t pmap, uint64_t esr, uint64_t far)
+{
+	struct pmap_call call = {pmap_enum_fault, (uint64_t) pmap, (uint64_t) esr, (uint64_t) far};
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+
+/* System MMU (SMMU). */
+int
+pmap_senter(pmap_t pmap, vm_offset_t va, vm_paddr_t pa, vm_prot_t prot,
+    u_int flags)
+{
+	struct pmap_call call = {pmap_enum_senter, (uint64_t) pmap, (uint64_t) va, (uint64_t) pa, (uint64_t) prot, (uint64_t) flags};
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+int
+pmap_sremove(pmap_t pmap, vm_offset_t va)
+{
+	struct pmap_call call = {pmap_enum_sremove, (uint64_t) pmap, (uint64_t) va};
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+void
+pmap_sremove_pages(pmap_t pmap)
+{
+	struct pmap_call call = {pmap_enum_sremove_pages, (uint64_t) pmap};
+	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+
+struct pcb *
+pmap_switch(struct thread *old __unused, struct thread *new)
+{
+	struct pmap_call call = {pmap_enum_switch, (uint64_t) old, (uint64_t) new};
+	return (struct pcb *) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
+}
+
+
+// extern void (*pmap_clean_stage2_tlbi)(void);
+// extern void (*pmap_invalidate_vpipt_icache)(void);
