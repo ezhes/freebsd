@@ -187,34 +187,38 @@ __FBSDID("$FreeBSD$");
 */
 struct secure_memory_heap pmap_heap;   // for allocating whitelist array 
 typedef struct pmap_whitelist {
-       pmap_t *whitelist;    // each element in whitelist is an address (pointer) to pmap_t
-       size_t used;
-       size_t size;
+    pmap_t *whitelist;    // each element in whitelist is an address (pointer) to pmap_t
+    size_t used;
+    size_t size;
 } pmap_whitelist_t; 
+static pmap_whitelist_t pmap_whitelist;
+pmap_whitelist = smh_malloc($pmap_heap, sizeof(pmap_whitelist_t));
 
 void whitelist_init(pmap_whitelist_t *pmap_whitelist, size_t initialSize) {
-       pmap_whitelist->whitelist = smh_calloc(&pmap_heap, sizeof(*pmap_t), initialSize);
-       pmap_whitelist->used = 0;
-       pmap_whitelist->size = initialSize;
-       return;
+    pmap_whitelist->whitelist = smh_calloc(&pmap_heap, sizeof(*pmap_t), initialSize);
+    pmap_whitelist->used = 0;
+    pmap_whitelist->size = initialSize;
+    return;
 }
 
 void whitelist_append(pmap_whitelist_t *pmap_whitelist, *pmap_t pmap) {
-       if (pmap_whitelist->used == pmap_whitelist->size) {
-               pmap_whitelist->size *= 2;
-               pmap_whitelist->whitelist = smh_realloc(&pmap_heap, pmap_whitelist->whitelist, &pmap_whitelist->size * sizeof(*pmap_t));
-       }
-       pmap_whitelist->whitelist[pmap_whitelist->used++] = pmap;
-       return;
+	mtx_lock(&whitelist_mutex);
+    if (pmap_whitelist->used == pmap_whitelist->size) {
+    	pmap_whitelist->size *= 2;
+        pmap_whitelist->whitelist = smh_realloc(&pmap_heap, pmap_whitelist->whitelist, &pmap_whitelist->size * sizeof(*pmap_t));
+    }
+    pmap_whitelist->whitelist[pmap_whitelist->used++] = pmap;
+	mtx_unlock(&whitelist_mutex);
+    return;
 }
 /* Check if a pmap is in whitelist */
 bool valid_pmap(pmap_whitelist_t *pmap_whitelist, *pmap_t pmap) {
-       for (int i = 0; i < pmap_whitelist->size; i++) {
-               if (pmap_whitelist->whitelist[i] == pmap) {
-                       return true;
-               }
-       }
-       return false;
+    for (int i = 0; i < pmap_whitelist->size; i++) {
+        if (pmap_whitelist->whitelist[i] == pmap) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /* ============================================= */
@@ -315,6 +319,7 @@ vm_offset_t kernel_vm_end = 0;
  */
 static TAILQ_HEAD(pch, pv_chunk) pv_chunks = TAILQ_HEAD_INITIALIZER(pv_chunks);
 static struct mtx pv_chunks_mutex;
+static struct mtx whitelist_mutex;
 static struct rwlock pv_list_locks[NPV_LIST_LOCKS];
 static struct md_page *pv_table;
 static struct md_page pv_dummy;
