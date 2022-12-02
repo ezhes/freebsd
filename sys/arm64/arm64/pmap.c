@@ -182,6 +182,42 @@ __FBSDID("$FreeBSD$");
 #define	pmap_l1_pindex(v)	(NUL2E + ((v) >> L1_SHIFT))
 #define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)
 
+/*
+* White list for pmap function to check arguments 
+*/
+typedef struct pmap_whitelist {
+       *pmap_t *whitelist;
+       size_t used;
+       size_t size;
+} pmap_whitelist_t; 
+
+void whitelist_init(pmap_whitelist_t *pmap_whitelist, size_t initialSize) {
+       pmap_whitelist->whitelist = malloc(initialSize * sizeof(*pmap_t));
+       pmap_whitelist->used = 0;
+       pmap_whitelist->size = initialSize;
+       return;
+}
+
+void whitelist_append(pmap_whitelist_t *pmap_whitelist, *pmap_t pmap) {
+       if (pmap_whitelist->used == pmap_whitelist->size) {
+               pmap_whitelist->size *= 2;
+               pmap_whitelist->whitelist = realloc(pmap_whitelist->whitelist, pmap_whitelist->size * sizeof(*pmap_t));
+       }
+       pmap_whitelist->whitelist[pmap_whitelist->used++] = pmap;
+       return;
+}
+/* Check if a pmap is in whitelist */
+bool valid_pmap(pmap_whitelist_t *pmap_whitelist, *pmap_t pmap) {
+       for (int i = 0; i < pmap_whitelist->size; i++) {
+               if (pmap_whitelist->whitelist[i] == pmap) {
+                       return true;
+               }
+       }
+       return false;
+}
+
+/* ============================================= */
+
 static struct md_page *
 pa_to_pvh(vm_paddr_t pa)
 {
@@ -604,6 +640,10 @@ pmap_pte(pmap_t pmap, vm_offset_t va, int *level)
 bool
 pmap_ps_enabled_zoned(pmap_t pmap __unused)
 {
+    /* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 
 	return (superpages_enabled != 0);
 }
@@ -1253,6 +1293,10 @@ pmap_invalidate_all(pmap_t pmap)
 vm_paddr_t
 pmap_extract(pmap_t pmap, vm_offset_t va)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	pt_entry_t *pte, tpte;
 	vm_paddr_t pa;
 	int lvl;
@@ -1302,6 +1346,10 @@ pmap_extract(pmap_t pmap, vm_offset_t va)
 vm_page_t
 pmap_extract_and_hold(pmap_t pmap, vm_offset_t va, vm_prot_t prot)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	pt_entry_t *pte, tpte;
 	vm_offset_t off;
 	vm_page_t m;
@@ -1748,6 +1796,10 @@ pmap_abort_ptp(pmap_t pmap, vm_offset_t va, vm_page_t mpte)
 void
 pmap_pinit0(pmap_t pmap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 
 	PMAP_LOCK_INIT(pmap);
 	bzero(&pmap->pm_stats, sizeof(pmap->pm_stats));
@@ -1766,6 +1818,10 @@ pmap_pinit0(pmap_t pmap)
 int
 pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	vm_page_t m;
 
 	/*
@@ -2089,6 +2145,10 @@ retry:
 void
 pmap_release(pmap_t pmap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	boolean_t rv;
 	struct spglist free;
 	struct asid_set *set;
@@ -3030,6 +3090,10 @@ pmap_remove_l3_range(pmap_t pmap, pd_entry_t l2e, vm_offset_t sva,
 void
 pmap_remove(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	struct rwlock *lock;
 	vm_offset_t va_next;
 	pd_entry_t *l0, *l1, *l2;
@@ -3283,6 +3347,10 @@ pmap_protect_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t sva, pt_entry_t mask,
 void
 pmap_protect(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	vm_offset_t va, va_next;
 	pd_entry_t *l0, *l1, *l2;
 	pt_entry_t *l3p, l3, mask, nbits;
@@ -3703,6 +3771,10 @@ int
 pmap_senter_zoned(pmap_t pmap, vm_offset_t va, vm_paddr_t pa,
     vm_prot_t prot, u_int flags)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	pd_entry_t *pde;
 	pt_entry_t new_l3, orig_l3;
 	pt_entry_t *l3;
@@ -3765,6 +3837,10 @@ out:
 int
 pmap_sremove_zoned(pmap_t pmap, vm_offset_t va)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	pt_entry_t *pte;
 	int lvl;
 	int rc;
@@ -3795,6 +3871,10 @@ pmap_sremove_zoned(pmap_t pmap, vm_offset_t va)
 void
 pmap_sremove_pages_zoned(pmap_t pmap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	pd_entry_t l0e, *l1, l1e, *l2, l2e;
 	pt_entry_t *l3, l3e;
 	vm_page_t m, m0, m1;
@@ -3890,6 +3970,10 @@ int
 pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
     u_int flags, int8_t psind)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	struct rwlock *lock;
 	pd_entry_t *pde;
 	pt_entry_t new_l3, orig_l3;
@@ -4403,6 +4487,10 @@ void
 pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
     vm_page_t m_start, vm_prot_t prot)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	struct rwlock *lock;
 	vm_offset_t va;
 	vm_page_t m, mpte;
@@ -4443,6 +4531,10 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 void
 pmap_enter_quick(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	struct rwlock *lock;
 
 	lock = NULL;
@@ -4594,6 +4686,10 @@ void
 pmap_object_init_pt(pmap_t pmap, vm_offset_t addr, vm_object_t object,
     vm_pindex_t pindex, vm_size_t size)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 
 	VM_OBJECT_ASSERT_WLOCKED(object);
 	KASSERT(object->type == OBJT_DEVICE || object->type == OBJT_SG,
@@ -4612,6 +4708,10 @@ pmap_object_init_pt(pmap_t pmap, vm_offset_t addr, vm_object_t object,
 void
 pmap_unwire(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	vm_offset_t va_next;
 	pd_entry_t *l0, *l1, *l2;
 	pt_entry_t *l3;
@@ -4982,6 +5082,10 @@ pmap_quick_remove_page(vm_offset_t addr)
 boolean_t
 pmap_page_exists_quick(pmap_t pmap, vm_page_t m)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	struct md_page *pvh;
 	struct rwlock *lock;
 	pv_entry_t pv;
@@ -5124,6 +5228,10 @@ pmap_page_is_mapped_zoned(vm_page_t m)
 void
 pmap_remove_pages(pmap_t pmap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 	pd_entry_t *pde;
 	pt_entry_t *pte, tpte;
 	struct spglist free;
@@ -5409,6 +5517,11 @@ pmap_is_modified(vm_page_t m)
 boolean_t
 pmap_is_prefaultable(pmap_t pmap, vm_offset_t addr)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	pt_entry_t *pte;
 	boolean_t rv;
 	int lvl;
@@ -5691,6 +5804,11 @@ out:
 void
 pmap_advise(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, int advice)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct rwlock *lock;
 	vm_offset_t va, va_next;
 	vm_page_t m;
@@ -6562,6 +6680,11 @@ pmap_demote_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t va)
 int
 pmap_mincore(pmap_t pmap, vm_offset_t addr, vm_paddr_t *pap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	pt_entry_t *pte, tpte;
 	vm_paddr_t mask, pa;
 	int lvl, val;
@@ -6721,6 +6844,11 @@ uint64_t
 pmap_to_ttbr0_zoned(pmap_t pmap)
 {
 
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	return (ASID_TO_OPERAND(COOKIE_TO_ASID(pmap->pm_cookie)) |
 	    pmap->pm_ttbr);
 }
@@ -6775,6 +6903,10 @@ pmap_activate_int(pmap_t pmap)
 void
 pmap_activate_vm_zoned(pmap_t pmap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 
 	PMAP_ASSERT_STAGE2(pmap);
 
@@ -6836,6 +6968,10 @@ pmap_switch_zoned(struct thread *old __unused, struct thread *new)
 void
 pmap_sync_icache(pmap_t pmap, vm_offset_t va, vm_size_t sz)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 
 	PMAP_ASSERT_STAGE1(pmap);
 	KASSERT(ADDR_IS_CANONICAL(va),
@@ -6940,6 +7076,11 @@ fault_exec:
 int
 pmap_fault_zoned(pmap_t pmap, uint64_t esr, uint64_t far)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	pt_entry_t pte, *ptep;
 	register_t intr;
 	uint64_t ec, par;
@@ -7137,6 +7278,10 @@ pmap_unmap_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
 boolean_t
 pmap_is_valid_memattr(pmap_t pmap __unused, vm_memattr_t mode)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
 
 	return (mode >= VM_MEMATTR_DEVICE && mode <= VM_MEMATTR_WRITE_THROUGH);
 }
@@ -7497,6 +7642,11 @@ pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma)
 void
 pmap_activate_vm(pmap_t pmap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct pmap_call call = {pmap_enum_activate_vm, (uint64_t) pmap};
 	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
@@ -7574,6 +7724,11 @@ pmap_page_is_mapped(vm_page_t m)
 int
 pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct pmap_call call = {pmap_enum_pinit_stage, (uint64_t) pmap, (uint64_t) stage, (uint64_t) levels};
 	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
@@ -7581,6 +7736,11 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 bool
 pmap_ps_enabled(pmap_t pmap __unused)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct pmap_call call = {pmap_enum_ps_enabled, (uint64_t) pmap};
 	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
@@ -7588,6 +7748,11 @@ pmap_ps_enabled(pmap_t pmap __unused)
 uint64_t
 pmap_to_ttbr0(pmap_t pmap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct pmap_call call = {pmap_enum_to_ttbr0, (uint64_t) pmap};
 	return (uint64_t) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
@@ -7623,6 +7788,11 @@ pmap_unmap_io_transient(vm_page_t * page, vm_offset_t * vaddr, int count, boolea
 bool
 pmap_get_tables(pmap_t pmap, vm_offset_t va, pd_entry_t ** l0, pd_entry_t ** l1, pd_entry_t ** l2, pt_entry_t ** l3)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct pmap_call call = {pmap_enum_get_tables, (uint64_t) pmap, (uint64_t) va, (uint64_t) l0, (uint64_t) l1, (uint64_t) l2, (uint64_t) l3};
 	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
@@ -7630,6 +7800,11 @@ pmap_get_tables(pmap_t pmap, vm_offset_t va, pd_entry_t ** l0, pd_entry_t ** l1,
 int
 pmap_fault(pmap_t pmap, uint64_t esr, uint64_t far)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct pmap_call call = {pmap_enum_fault, (uint64_t) pmap, (uint64_t) esr, (uint64_t) far};
 	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
@@ -7637,6 +7812,11 @@ pmap_fault(pmap_t pmap, uint64_t esr, uint64_t far)
 int
 pmap_senter(pmap_t pmap, vm_offset_t va, vm_paddr_t pa, vm_prot_t prot, u_int flags)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct pmap_call call = {pmap_enum_senter, (uint64_t) pmap, (uint64_t) va, (uint64_t) pa, (uint64_t) prot, (uint64_t) flags};
 	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
@@ -7644,6 +7824,11 @@ pmap_senter(pmap_t pmap, vm_offset_t va, vm_paddr_t pa, vm_prot_t prot, u_int fl
 int
 pmap_sremove(pmap_t pmap, vm_offset_t va)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+
 	struct pmap_call call = {pmap_enum_sremove, (uint64_t) pmap, (uint64_t) va};
 	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
@@ -7651,6 +7836,11 @@ pmap_sremove(pmap_t pmap, vm_offset_t va)
 void
 pmap_sremove_pages(pmap_t pmap)
 {
+	/* check valid argument */
+    if (not valid_pmap(pmap_whitelist, pmap)) {
+        panic("Invalid pmap in argument");
+    }
+	
 	struct pmap_call call = {pmap_enum_sremove_pages, (uint64_t) pmap};
 	zm_zone_enter(ZONE_STATE_PMAP, (void *)&call);
 }
