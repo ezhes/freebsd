@@ -318,16 +318,21 @@ vmspace_zdtor(void *mem, int size, void *arg)
 #endif	/* INVARIANTS */
 
 /*
- * Allocate a vmspace structure, including a vm_map and pmap,
- * and initialize those structures.  The refcnt is set to 1.
- */
+* Change the way that vmspace allocation. 
+* Now pmap attribute is a pointer in vmspace.
+* Use smh_malloc (Safe Memory Heap) for pmap allocation. 
+*/
+struct secure_memory_heap pmap_heap;
+
 struct vmspace *
 vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 {
+	struct pmap_t *pmap;
+	pmap = smh_calloc(&pmap_heap, size_of(pmap_t), 1)
 	struct vmspace *vm;
 
 	vm = uma_zalloc(vmspace_zone, M_WAITOK);
-	KASSERT(vm->vm_map.pmap == NULL, ("vm_map.pmap must be NULL"));
+	vm->pmap = &pmap
 	if (!pinit(vmspace_pmap(vm))) {
 		uma_zfree(vmspace_zone, vm);
 		return (NULL);
@@ -345,6 +350,36 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 	vm->vm_maxsaddr = 0;
 	return (vm);
 }
+
+
+/*
+ * Allocate a vmspace structure, including a vm_map and pmap,
+ * and initialize those structures.  The refcnt is set to 1.
+ */
+// struct vmspace *
+// vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
+// {
+// 	struct vmspace *vm;
+
+// 	vm = uma_zalloc(vmspace_zone, M_WAITOK);
+// 	KASSERT(vm->vm_map.pmap == NULL, ("vm_map.pmap must be NULL"));
+// 	if (!pinit(vmspace_pmap(vm))) {
+// 		uma_zfree(vmspace_zone, vm);
+// 		return (NULL);
+// 	}
+// 	CTR1(KTR_VM, "vmspace_alloc: %p", vm);
+// 	_vm_map_init(&vm->vm_map, vmspace_pmap(vm), min, max);
+// 	refcount_init(&vm->vm_refcnt, 1);
+// 	vm->vm_shm = NULL;
+// 	vm->vm_swrss = 0;
+// 	vm->vm_tsize = 0;
+// 	vm->vm_dsize = 0;
+// 	vm->vm_ssize = 0;
+// 	vm->vm_taddr = 0;
+// 	vm->vm_daddr = 0;
+// 	vm->vm_maxsaddr = 0;
+// 	return (vm);
+// }
 
 #ifdef RACCT
 static void
