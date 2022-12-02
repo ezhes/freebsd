@@ -185,14 +185,15 @@ __FBSDID("$FreeBSD$");
 /*
 * White list for pmap function to check arguments 
 */
+struct secure_memory_heap pmap_heap;   // for allocating whitelist array 
 typedef struct pmap_whitelist {
-       *pmap_t *whitelist;
+       pmap_t *whitelist;    // each element in whitelist is an address (pointer) to pmap_t
        size_t used;
        size_t size;
 } pmap_whitelist_t; 
 
 void whitelist_init(pmap_whitelist_t *pmap_whitelist, size_t initialSize) {
-       pmap_whitelist->whitelist = malloc(initialSize * sizeof(*pmap_t));
+       pmap_whitelist->whitelist = smh_calloc(&pmap_heap, sizeof(*pmap_t), initialSize);
        pmap_whitelist->used = 0;
        pmap_whitelist->size = initialSize;
        return;
@@ -201,7 +202,7 @@ void whitelist_init(pmap_whitelist_t *pmap_whitelist, size_t initialSize) {
 void whitelist_append(pmap_whitelist_t *pmap_whitelist, *pmap_t pmap) {
        if (pmap_whitelist->used == pmap_whitelist->size) {
                pmap_whitelist->size *= 2;
-               pmap_whitelist->whitelist = realloc(pmap_whitelist->whitelist, pmap_whitelist->size * sizeof(*pmap_t));
+               pmap_whitelist->whitelist = smh_realloc(&pmap_heap, pmap_whitelist->whitelist, pmap_whitelist->size * sizeof(*pmap_t));
        }
        pmap_whitelist->whitelist[pmap_whitelist->used++] = pmap;
        return;
