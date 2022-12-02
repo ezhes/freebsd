@@ -182,6 +182,9 @@ __FBSDID("$FreeBSD$");
 #define	pmap_l1_pindex(v)	(NUL2E + ((v) >> L1_SHIFT))
 #define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)
 
+#define rw_wlock_spin(lockp)	do { } while (!rw_try_wlock(lockp))
+#define rw_rlock_spin(lockp)	do { } while (!rw_try_rlock(lockp))
+
 static struct md_page *
 pa_to_pvh(vm_paddr_t pa)
 {
@@ -221,7 +224,7 @@ page_to_pvh(vm_page_t m)
 		if (*_lockp != NULL)			\
 			rw_wunlock(*_lockp);		\
 		*_lockp = _new_lock;			\
-		rw_wlock(*_lockp);			\
+		rw_wlock_spin(*_lockp);			\
 	}						\
 } while (0)
 
@@ -2381,7 +2384,7 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 	pc_marker = (struct pv_chunk *)&pc_marker_b;
 	pc_marker_end = (struct pv_chunk *)&pc_marker_end_b;
 
-	mtx_lock(&pv_chunks_mutex);
+	mtx_lock_spin(&pv_chunks_mutex);
 	active_reclaims++;
 	TAILQ_INSERT_HEAD(&pv_chunks, pc_marker, pc_lru);
 	TAILQ_INSERT_TAIL(&pv_chunks, pc_marker_end, pc_lru);
@@ -2397,7 +2400,7 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 			 */
 			goto next_chunk;
 		}
-		mtx_unlock(&pv_chunks_mutex);
+		mtx_unlock_spin(&pv_chunks_mutex);
 
 		/*
 		 * A pv_chunk can only be removed from the pc_lru list
@@ -2412,15 +2415,15 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 			if (pmap > locked_pmap) {
 				RELEASE_PV_LIST_LOCK(lockp);
 				PMAP_LOCK(pmap);
-				mtx_lock(&pv_chunks_mutex);
+				mtx_lock_spin(&pv_chunks_mutex);
 				continue;
 			} else if (pmap != locked_pmap) {
 				if (PMAP_TRYLOCK(pmap)) {
-					mtx_lock(&pv_chunks_mutex);
+					mtx_lock_spin(&pv_chunks_mutex);
 					continue;
 				} else {
 					pmap = NULL; /* pmap is not locked */
-					mtx_lock(&pv_chunks_mutex);
+					mtx_lock_spin(&pv_chunks_mutex);
 					pc = TAILQ_NEXT(pc_marker, pc_lru);
 					if (pc == NULL ||
 					    pc->pc_pmap != next_pmap)
@@ -2472,7 +2475,7 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 			}
 		}
 		if (freed == 0) {
-			mtx_lock(&pv_chunks_mutex);
+			mtx_lock_spin(&pv_chunks_mutex);
 			goto next_chunk;
 		}
 		/* Every freed mapping is for a 4 KB page. */
@@ -2489,12 +2492,12 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 			/* Entire chunk is free; return it. */
 			m_pc = PHYS_TO_VM_PAGE(DMAP_TO_PHYS((vm_offset_t)pc));
 			dump_drop_page(m_pc->phys_addr);
-			mtx_lock(&pv_chunks_mutex);
+			mtx_lock_spin(&pv_chunks_mutex);
 			TAILQ_REMOVE(&pv_chunks, pc, pc_lru);
 			break;
 		}
 		TAILQ_INSERT_HEAD(&pmap->pm_pvchunk, pc, pc_list);
-		mtx_lock(&pv_chunks_mutex);
+		mtx_lock_spin(&pv_chunks_mutex);
 		/* One freed pv entry in locked_pmap is sufficient. */
 		if (pmap == locked_pmap)
 			break;
@@ -2520,7 +2523,7 @@ next_chunk:
 	TAILQ_REMOVE(&pv_chunks, pc_marker, pc_lru);
 	TAILQ_REMOVE(&pv_chunks, pc_marker_end, pc_lru);
 	active_reclaims--;
-	mtx_unlock(&pv_chunks_mutex);
+	mtx_unlock_spin(&pv_chunks_mutex);
 	if (pmap != NULL && pmap != locked_pmap)
 		PMAP_UNLOCK(pmap);
 	if (m_pc == NULL && !SLIST_EMPTY(&free)) {
@@ -2569,9 +2572,9 @@ free_pv_chunk(struct pv_chunk *pc)
 {
 	vm_page_t m;
 
-	mtx_lock(&pv_chunks_mutex);
+	mtx_lock_spin(&pv_chunks_mutex);
  	TAILQ_REMOVE(&pv_chunks, pc, pc_lru);
-	mtx_unlock(&pv_chunks_mutex);
+	mtx_unlock_spin(&pv_chunks_mutex);
 	PV_STAT(atomic_subtract_int(&pv_entry_spare, _NPCPV));
 	PV_STAT(atomic_subtract_int(&pc_chunk_count, 1));
 	PV_STAT(atomic_add_int(&pc_chunk_frees, 1));
@@ -2643,9 +2646,9 @@ retry:
 	pc->pc_map[0] = PC_FREE0 & ~1ul;	/* preallocated bit 0 */
 	pc->pc_map[1] = PC_FREE1;
 	pc->pc_map[2] = PC_FREE2;
-	mtx_lock(&pv_chunks_mutex);
+	mtx_lock_spin(&pv_chunks_mutex);
 	TAILQ_INSERT_TAIL(&pv_chunks, pc, pc_lru);
-	mtx_unlock(&pv_chunks_mutex);
+	mtx_unlock_spin(&pv_chunks_mutex);
 	pv = &pc->pc_pventry[0];
 	TAILQ_INSERT_HEAD(&pmap->pm_pvchunk, pc, pc_list);
 	PV_STAT(atomic_add_long(&pv_entry_count, 1));
@@ -2718,9 +2721,9 @@ retry:
 			goto retry;
 	}
 	if (!TAILQ_EMPTY(&new_tail)) {
-		mtx_lock(&pv_chunks_mutex);
+		mtx_lock_spin(&pv_chunks_mutex);
 		TAILQ_CONCAT(&pv_chunks, &new_tail, pc_lru);
-		mtx_unlock(&pv_chunks_mutex);
+		mtx_unlock_spin(&pv_chunks_mutex);
 	}
 }
 
@@ -3066,7 +3069,7 @@ pmap_remove_l3_range(pmap_t pmap, pd_entry_t l2e, vm_offset_t sva,
 					rw_wunlock(*lockp);
 				}
 				*lockp = new_lock;
-				rw_wlock(*lockp);
+				rw_wlock_spin(*lockp);
 			}
 			pmap_pvh_free(&m->md, pmap, sva);
 			if (TAILQ_EMPTY(&m->md.pv_list) &&
@@ -3223,7 +3226,7 @@ pmap_remove_all_zoned(vm_page_t m)
 	SLIST_INIT(&free);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
-	rw_wlock(lock);
+	rw_wlock_spin(lock);
 retry:
 	while ((pv = TAILQ_FIRST(&pvh->pv_list)) != NULL) {
 		pmap = PV_PMAP(pv);
@@ -3231,7 +3234,7 @@ retry:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock(lock);
+			rw_wlock_spin(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -3254,7 +3257,7 @@ retry:
 			md_gen = m->md.pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock(lock);
+			rw_wlock_spin(lock);
 			if (pvh_gen != pvh->pv_gen || md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -5058,7 +5061,7 @@ pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m)
 	    ("pmap_page_exists_quick: page %p is not managed", m));
 	rv = FALSE;
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_rlock(lock);
+	rw_rlock_spin(lock);
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_next) {
 		if (PV_PMAP(pv) == pmap) {
 			rv = TRUE;
@@ -5103,7 +5106,7 @@ pmap_page_wired_mappings_zoned(vm_page_t m)
 	if ((m->oflags & VPO_UNMANAGED) != 0)
 		return (0);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_rlock(lock);
+	rw_rlock_spin(lock);
 restart:
 	count = 0;
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_next) {
@@ -5112,7 +5115,7 @@ restart:
 			md_gen = m->md.pv_gen;
 			rw_runlock(lock);
 			PMAP_LOCK(pmap);
-			rw_rlock(lock);
+			rw_rlock_spin(lock);
 			if (md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto restart;
@@ -5132,7 +5135,7 @@ restart:
 				pvh_gen = pvh->pv_gen;
 				rw_runlock(lock);
 				PMAP_LOCK(pmap);
-				rw_rlock(lock);
+				rw_rlock_spin(lock);
 				if (md_gen != m->md.pv_gen ||
 				    pvh_gen != pvh->pv_gen) {
 					PMAP_UNLOCK(pmap);
@@ -5163,7 +5166,7 @@ pmap_page_is_mapped_zoned(vm_page_t m)
 	if ((m->oflags & VPO_UNMANAGED) != 0)
 		return (false);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_rlock(lock);
+	rw_rlock_spin(lock);
 	rv = !TAILQ_EMPTY(&m->md.pv_list) ||
 	    ((m->flags & PG_FICTITIOUS) == 0 &&
 	    !TAILQ_EMPTY(&page_to_pvh(m)->pv_list));
@@ -5371,7 +5374,7 @@ pmap_page_test_mappings(vm_page_t m, boolean_t accessed, boolean_t modified)
 
 	rv = FALSE;
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_rlock(lock);
+	rw_rlock_spin(lock);
 restart:
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_next) {
 		pmap = PV_PMAP(pv);
@@ -5380,7 +5383,7 @@ restart:
 			md_gen = m->md.pv_gen;
 			rw_runlock(lock);
 			PMAP_LOCK(pmap);
-			rw_rlock(lock);
+			rw_rlock_spin(lock);
 			if (md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto restart;
@@ -5414,7 +5417,7 @@ restart:
 				pvh_gen = pvh->pv_gen;
 				rw_runlock(lock);
 				PMAP_LOCK(pmap);
-				rw_rlock(lock);
+				rw_rlock_spin(lock);
 				if (md_gen != m->md.pv_gen ||
 				    pvh_gen != pvh->pv_gen) {
 					PMAP_UNLOCK(pmap);
@@ -5526,7 +5529,7 @@ pmap_remove_write_zoned(vm_page_t m)
 		return;
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
-	rw_wlock(lock);
+	rw_wlock_spin(lock);
 retry:
 	TAILQ_FOREACH_SAFE(pv, &pvh->pv_list, pv_next, next_pv) {
 		pmap = PV_PMAP(pv);
@@ -5535,7 +5538,7 @@ retry:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock(lock);
+			rw_wlock_spin(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -5558,7 +5561,7 @@ retry:
 			md_gen = m->md.pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock(lock);
+			rw_wlock_spin(lock);
 			if (pvh_gen != pvh->pv_gen ||
 			    md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
@@ -5619,7 +5622,7 @@ pmap_ts_referenced_zoned(vm_page_t m)
 	pa = VM_PAGE_TO_PHYS(m);
 	lock = PHYS_TO_PV_LIST_LOCK(pa);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
-	rw_wlock(lock);
+	rw_wlock_spin(lock);
 retry:
 	not_cleared = 0;
 	if ((pvf = TAILQ_FIRST(&pvh->pv_list)) == NULL)
@@ -5633,7 +5636,7 @@ retry:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock(lock);
+			rw_wlock_spin(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -5709,7 +5712,7 @@ small_mappings:
 			md_gen = m->md.pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock(lock);
+			rw_wlock_spin(lock);
 			if (pvh_gen != pvh->pv_gen || md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -5905,7 +5908,7 @@ pmap_clear_modify_zoned(vm_page_t m)
 		return;
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_wlock(lock);
+	rw_wlock_spin(lock);
 restart:
 	TAILQ_FOREACH_SAFE(pv, &pvh->pv_list, pv_next, next_pv) {
 		pmap = PV_PMAP(pv);
@@ -5914,7 +5917,7 @@ restart:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock(lock);
+			rw_wlock_spin(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto restart;
@@ -5950,7 +5953,7 @@ restart:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock(lock);
+			rw_wlock_spin(lock);
 			if (pvh_gen != pvh->pv_gen || md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto restart;
@@ -7710,7 +7713,7 @@ pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma)
 {
 	uint64_t args[] = {(uint64_t) m, (uint64_t) ma};
 	struct pmap_call call = {pmap_page_set_memattr_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7718,7 +7721,7 @@ pmap_activate_vm(pmap_t pmap)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_activate_vm_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7726,7 +7729,7 @@ pmap_bootstrap(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart, vm_size
 {
 	uint64_t args[] = {(uint64_t) l0pt, (uint64_t) l1pt, (uint64_t) kernstart, (uint64_t) kernlen};
 	struct pmap_call call = {pmap_bootstrap_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -7734,7 +7737,7 @@ pmap_change_attr(vm_offset_t va, vm_size_t size, int mode)
 {
 	uint64_t args[] = {(uint64_t) va, (uint64_t) size, (uint64_t) mode};
 	struct pmap_call call = {pmap_change_attr_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -7742,7 +7745,7 @@ pmap_change_prot(vm_offset_t va, vm_size_t size, vm_prot_t prot)
 {
 	uint64_t args[] = {(uint64_t) va, (uint64_t) size, (uint64_t) prot};
 	struct pmap_call call = {pmap_change_prot_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7750,7 +7753,7 @@ pmap_kenter(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode)
 {
 	uint64_t args[] = {(uint64_t) sva, (uint64_t) size, (uint64_t) pa, (uint64_t) mode};
 	struct pmap_call call = {pmap_kenter_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7758,7 +7761,7 @@ pmap_kenter_device(vm_offset_t sva, vm_size_t size, vm_paddr_t pa)
 {
 	uint64_t args[] = {(uint64_t) sva, (uint64_t) size, (uint64_t) pa};
 	struct pmap_call call = {pmap_kenter_device_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 bool
@@ -7766,7 +7769,7 @@ pmap_klookup(vm_offset_t va, vm_paddr_t * pa)
 {
 	uint64_t args[] = {(uint64_t) va, (uint64_t) pa};
 	struct pmap_call call = {pmap_klookup_enum, args};
-	return (bool) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 vm_paddr_t
@@ -7774,7 +7777,7 @@ pmap_kextract(vm_offset_t va)
 {
 	uint64_t args[] = {(uint64_t) va};
 	struct pmap_call call = {pmap_kextract_enum, args};
-	return (vm_paddr_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (vm_paddr_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7782,7 +7785,7 @@ pmap_kremove(vm_offset_t va)
 {
 	uint64_t args[] = {(uint64_t) va};
 	struct pmap_call call = {pmap_kremove_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7790,7 +7793,7 @@ pmap_kremove_device(vm_offset_t sva, vm_size_t size)
 {
 	uint64_t args[] = {(uint64_t) sva, (uint64_t) size};
 	struct pmap_call call = {pmap_kremove_device_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 bool
@@ -7798,7 +7801,7 @@ pmap_page_is_mapped(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_page_is_mapped_enum, args};
-	return (bool) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -7806,7 +7809,7 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) stage, (uint64_t) levels};
 	struct pmap_call call = {pmap_pinit_stage_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 bool
@@ -7814,7 +7817,7 @@ pmap_ps_enabled(pmap_t pmap __unused)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_ps_enabled_enum, args};
-	return (bool) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 uint64_t
@@ -7822,7 +7825,7 @@ pmap_to_ttbr0(pmap_t pmap)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_to_ttbr0_enum, args};
-	return (uint64_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (uint64_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void *
@@ -7830,7 +7833,7 @@ pmap_mapbios(vm_paddr_t pa, vm_size_t size)
 {
 	uint64_t args[] = {(uint64_t) pa, (uint64_t) size};
 	struct pmap_call call = {pmap_mapbios_enum, args};
-	return (void *) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (void *) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7838,7 +7841,7 @@ pmap_unmapbios(vm_offset_t va, vm_size_t size)
 {
 	uint64_t args[] = {(uint64_t) va, (uint64_t) size};
 	struct pmap_call call = {pmap_unmapbios_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 boolean_t
@@ -7846,7 +7849,7 @@ pmap_map_io_transient(vm_page_t * page, vm_offset_t * vaddr, int count, boolean_
 {
 	uint64_t args[] = {(uint64_t) page, (uint64_t) vaddr, (uint64_t) count, (uint64_t) can_fault};
 	struct pmap_call call = {pmap_map_io_transient_enum, args};
-	return (boolean_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (boolean_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7854,7 +7857,7 @@ pmap_unmap_io_transient(vm_page_t * page, vm_offset_t * vaddr, int count, boolea
 {
 	uint64_t args[] = {(uint64_t) page, (uint64_t) vaddr, (uint64_t) count, (uint64_t) can_fault};
 	struct pmap_call call = {pmap_unmap_io_transient_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 bool
@@ -7862,7 +7865,7 @@ pmap_get_tables(pmap_t pmap, vm_offset_t va, pd_entry_t ** l0, pd_entry_t ** l1,
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) va, (uint64_t) l0, (uint64_t) l1, (uint64_t) l2, (uint64_t) l3};
 	struct pmap_call call = {pmap_get_tables_enum, args};
-	return (bool) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (bool) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -7870,7 +7873,7 @@ pmap_fault(pmap_t pmap, uint64_t esr, uint64_t far)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) esr, (uint64_t) far};
 	struct pmap_call call = {pmap_fault_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -7878,7 +7881,7 @@ pmap_senter(pmap_t pmap, vm_offset_t va, vm_paddr_t pa, vm_prot_t prot, u_int fl
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) va, (uint64_t) pa, (uint64_t) prot, (uint64_t) flags};
 	struct pmap_call call = {pmap_senter_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -7886,7 +7889,7 @@ pmap_sremove(pmap_t pmap, vm_offset_t va)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) va};
 	struct pmap_call call = {pmap_sremove_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7894,7 +7897,7 @@ pmap_sremove_pages(pmap_t pmap)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_sremove_pages_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 struct pcb *
@@ -7902,7 +7905,7 @@ pmap_switch(struct thread * old __unused, struct thread * new)
 {
 	uint64_t args[] = {(uint64_t) old, (uint64_t) new};
 	struct pmap_call call = {pmap_switch_enum, args};
-	return (struct pcb *) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (struct pcb *) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7910,7 +7913,7 @@ pmap_activate(struct thread * td)
 {
 	uint64_t args[] = {(uint64_t) td};
 	struct pmap_call call = {pmap_activate_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7918,7 +7921,7 @@ pmap_advise(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, int advice)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) sva, (uint64_t) eva, (uint64_t) advice};
 	struct pmap_call call = {pmap_advise_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7926,7 +7929,7 @@ pmap_align_superpage(vm_object_t object, vm_ooffset_t offset, vm_offset_t * addr
 {
 	uint64_t args[] = {(uint64_t) object, (uint64_t) offset, (uint64_t) addr, (uint64_t) size};
 	struct pmap_call call = {pmap_align_superpage_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7934,7 +7937,7 @@ pmap_clear_modify(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_clear_modify_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7942,7 +7945,7 @@ pmap_copy(pmap_t dst_pmap, pmap_t src_pmap, vm_offset_t dst_addr, vm_size_t len,
 {
 	uint64_t args[] = {(uint64_t) dst_pmap, (uint64_t) src_pmap, (uint64_t) dst_addr, (uint64_t) len, (uint64_t) src_addr};
 	struct pmap_call call = {pmap_copy_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7950,7 +7953,7 @@ pmap_copy_page(vm_page_t msrc, vm_page_t mdst)
 {
 	uint64_t args[] = {(uint64_t) msrc, (uint64_t) mdst};
 	struct pmap_call call = {pmap_copy_page_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7958,7 +7961,7 @@ pmap_copy_pages(vm_page_t * ma, vm_offset_t a_offset, vm_page_t * mb, vm_offset_
 {
 	uint64_t args[] = {(uint64_t) ma, (uint64_t) a_offset, (uint64_t) mb, (uint64_t) b_offset, (uint64_t) xfersize};
 	struct pmap_call call = {pmap_copy_pages_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -7966,7 +7969,7 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot, u_int flags
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) va, (uint64_t) m, (uint64_t) prot, (uint64_t) flags, (uint64_t) psind};
 	struct pmap_call call = {pmap_enter_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7974,7 +7977,7 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end, vm_page_t m_s
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) start, (uint64_t) end, (uint64_t) m_start, (uint64_t) prot};
 	struct pmap_call call = {pmap_enter_object_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -7982,7 +7985,7 @@ pmap_enter_quick(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) va, (uint64_t) m, (uint64_t) prot};
 	struct pmap_call call = {pmap_enter_quick_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 vm_paddr_t
@@ -7990,7 +7993,7 @@ pmap_extract(pmap_t pmap, vm_offset_t va)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) va};
 	struct pmap_call call = {pmap_extract_enum, args};
-	return (vm_paddr_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (vm_paddr_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 vm_page_t
@@ -7998,7 +8001,7 @@ pmap_extract_and_hold(pmap_t pmap, vm_offset_t va, vm_prot_t prot)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) va, (uint64_t) prot};
 	struct pmap_call call = {pmap_extract_and_hold_enum, args};
-	return (vm_page_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (vm_page_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8006,7 +8009,7 @@ pmap_growkernel(vm_offset_t addr)
 {
 	uint64_t args[] = {(uint64_t) addr};
 	struct pmap_call call = {pmap_growkernel_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8014,7 +8017,7 @@ pmap_init(void)
 {
 	uint64_t args[] = {};
 	struct pmap_call call = {pmap_init_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 boolean_t
@@ -8022,7 +8025,7 @@ pmap_is_modified(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_is_modified_enum, args};
-	return (boolean_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (boolean_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 boolean_t
@@ -8030,7 +8033,7 @@ pmap_is_prefaultable(pmap_t pmap, vm_offset_t addr)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) addr};
 	struct pmap_call call = {pmap_is_prefaultable_enum, args};
-	return (boolean_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (boolean_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 boolean_t
@@ -8038,7 +8041,7 @@ pmap_is_referenced(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_is_referenced_enum, args};
-	return (boolean_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (boolean_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 boolean_t
@@ -8046,7 +8049,7 @@ pmap_is_valid_memattr(pmap_t pmap __unused, vm_memattr_t mode)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) mode};
 	struct pmap_call call = {pmap_is_valid_memattr_enum, args};
-	return (boolean_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (boolean_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 vm_offset_t
@@ -8054,7 +8057,7 @@ pmap_map(vm_offset_t * virt, vm_paddr_t start, vm_paddr_t end, int prot)
 {
 	uint64_t args[] = {(uint64_t) virt, (uint64_t) start, (uint64_t) end, (uint64_t) prot};
 	struct pmap_call call = {pmap_map_enum, args};
-	return (vm_offset_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (vm_offset_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -8062,7 +8065,7 @@ pmap_mincore(pmap_t pmap, vm_offset_t addr, vm_paddr_t * pap)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) addr, (uint64_t) pap};
 	struct pmap_call call = {pmap_mincore_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8070,7 +8073,7 @@ pmap_object_init_pt(pmap_t pmap, vm_offset_t addr, vm_object_t object, vm_pindex
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) addr, (uint64_t) object, (uint64_t) pindex, (uint64_t) size};
 	struct pmap_call call = {pmap_object_init_pt_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 boolean_t
@@ -8078,7 +8081,7 @@ pmap_page_exists_quick(pmap_t pmap, vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) m};
 	struct pmap_call call = {pmap_page_exists_quick_enum, args};
-	return (boolean_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (boolean_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8086,7 +8089,7 @@ pmap_page_init(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_page_init_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -8094,7 +8097,7 @@ pmap_page_wired_mappings(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_page_wired_mappings_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -8102,7 +8105,7 @@ pmap_pinit(pmap_t pmap)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_pinit_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8110,7 +8113,7 @@ pmap_pinit0(pmap_t pmap)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_pinit0_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8118,7 +8121,7 @@ pmap_protect(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) sva, (uint64_t) eva, (uint64_t) prot};
 	struct pmap_call call = {pmap_protect_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8126,7 +8129,7 @@ pmap_qenter(vm_offset_t sva, vm_page_t * ma, int count)
 {
 	uint64_t args[] = {(uint64_t) sva, (uint64_t) ma, (uint64_t) count};
 	struct pmap_call call = {pmap_qenter_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8134,7 +8137,7 @@ pmap_qremove(vm_offset_t sva, int count)
 {
 	uint64_t args[] = {(uint64_t) sva, (uint64_t) count};
 	struct pmap_call call = {pmap_qremove_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 vm_offset_t
@@ -8142,7 +8145,7 @@ pmap_quick_enter_page(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_quick_enter_page_enum, args};
-	return (vm_offset_t) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (vm_offset_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8150,7 +8153,7 @@ pmap_quick_remove_page(vm_offset_t addr)
 {
 	uint64_t args[] = {(uint64_t) addr};
 	struct pmap_call call = {pmap_quick_remove_page_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8158,7 +8161,7 @@ pmap_release(pmap_t pmap)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_release_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8166,7 +8169,7 @@ pmap_remove(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) sva, (uint64_t) eva};
 	struct pmap_call call = {pmap_remove_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8174,7 +8177,7 @@ pmap_remove_all(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_remove_all_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8182,7 +8185,7 @@ pmap_remove_pages(pmap_t pmap)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_remove_pages_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8190,7 +8193,7 @@ pmap_remove_write(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_remove_write_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8198,7 +8201,7 @@ pmap_sync_icache(pmap_t pmap, vm_offset_t va, vm_size_t sz)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) va, (uint64_t) sz};
 	struct pmap_call call = {pmap_sync_icache_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 int
@@ -8206,7 +8209,7 @@ pmap_ts_referenced(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_ts_referenced_enum, args};
-	return (int) zenter(ZONE_STATE_PMAP, (void *) &call);
+	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8214,7 +8217,7 @@ pmap_unwire(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) sva, (uint64_t) eva};
 	struct pmap_call call = {pmap_unwire_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8222,7 +8225,7 @@ pmap_zero_page(vm_page_t m)
 {
 	uint64_t args[] = {(uint64_t) m};
 	struct pmap_call call = {pmap_zero_page_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 void
@@ -8230,7 +8233,7 @@ pmap_zero_page_area(vm_page_t m, int off, int size)
 {
 	uint64_t args[] = {(uint64_t) m, (uint64_t) off, (uint64_t) size};
 	struct pmap_call call = {pmap_zero_page_area_enum, args};
-	zenter(ZONE_STATE_PMAP, (void *) &call);
+	zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
 // because defn not in pmap.c, skipped void *pmap_mapdev_attr(vm_offset_t pa, vm_size_t size, vm_memattr_t ma)

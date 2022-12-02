@@ -72,12 +72,12 @@ vm_extern
 vm_kern // has vm_maps
 vm_page
 vm_phys
-
-vmspace_alloc
+rwlock.h
 
 ## Interesting structs & fns
 
 struct vmspace { !! owns pmap
+vmspace_alloc
 PMAP_LOCK_INIT(
 
 ## Weird things
@@ -86,3 +86,31 @@ Are #define macros used unzoned?
 
 Find definition of `pmap_mapdev_attr(vm_offset_t pa`, `pmap_mapdev(vm_offset_t`, `pmap_unmapdev(vm_offset_t`.
 What to do with extern fn's `pmap_clean_stage2_tlbi` and `pmap_invalidate_vpipt_icache`?
+
+## functions that might map protected phys page into an attacker pmap
+
+pmap_copy
+pmap_copy_page
+pmap_copy_pages
+pmap_extract
+pmap_extract_and_hold
+pmap_map
+pmap_protect
+
+## lock notes
+
+### pmap.c
+
+mtx_lock -> mtx_lock_spin
+mtx_unlock -> mtx_unlock_spin
+
+#### rw locks -- yikes
+
+rw_wlock
+rw_rlock
+rw_wunlock
+rw_runlock
+
+### inlcude pmap.h
+
+PMAP_LOCK etc.

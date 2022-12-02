@@ -1,4 +1,5 @@
-
+import os
+import shutil
 
 publics = 'void pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma);\
     void	pmap_activate_vm(pmap_t);\
@@ -77,7 +78,7 @@ publics = 'void pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma);\
     void		 pmap_zero_page(vm_page_t);\
     void		 pmap_zero_page_area(vm_page_t, int off, int size);'
 
-log_level = 'ERROR'
+log_level = 'WARN'
 
 debug_counter = 0
 
@@ -236,9 +237,17 @@ class Func:
         return fail
     
 if __name__ == "__main__":
+    pmapc_backup = 'pmap~.c'
+    pmapc_src = 'pmap.c'
+    pmapc_dest = 'pmap.c'
+    #pmapc_dest = 'pmap_candidate.c'
+
+    assert pmapc_backup != pmapc_dest
+    if not os.path.isfile(pmapc_backup):
+        shutil.copy2(pmapc_src, pmapc_backup)
+
     lines = None
-    with open('pmap~.c', 'r') as pmapc:
-        
+    with open(pmapc_backup, 'r') as pmapc:
         lines = pmapc.readlines()
 
 
@@ -255,8 +264,7 @@ if __name__ == "__main__":
         func = Func(line)
 
         if func.name in skip_names:
-            www('Skipping func:')
-            www(func.dump())
+            ddd('Skipping func:', func.dump())
             skip_decls.append(line)
             continue
 
@@ -273,6 +281,13 @@ if __name__ == "__main__":
 
     def zoned_name(func: Func):
         return func.name + '_zoned'
+
+    lock_defines = '\n\n#define rw_wlock_spin(lockp)\tdo { } while (!rw_try_wlock(lockp))\n#define rw_rlock_spin(lockp)\tdo { } while (!rw_try_rlock(lockp))'
+
+    new_declarations = ''
+    def new_declaration_of(func: Func):
+        declr = func.build_call_like(name_transform=zoned_name)
+        return func.rettype + ' ' + declr + ';\n'
 
     enum = '\nenum pmap_external_fn {'
     def enum_name(func: Func):
@@ -321,13 +336,8 @@ if __name__ == "__main__":
     def skipped_cmt_of(skip):
         return '\n// because defn not in pmap.c, skipped ' + ' '.join(skip.split())
 
-    def additions():
+    def end_additions():
         return preface + enum + enum_tail + struct + dispatch + dispatch_tail + public_fns + skipped_cmt
-
-    new_declarations = ''
-    def new_declaration_of(func: Func):
-        declr = func.build_call_like(name_transform=zoned_name)
-        return func.rettype + ' ' + declr + ';\n'
 
     pmapc = ''.join(lines)
     for func in funcs:
@@ -341,11 +351,47 @@ if __name__ == "__main__":
         skipped_cmt += skipped_cmt_of(skip)
     skipped_cmt += '\n'
 
-    pmapc_top, pmap_bottom = pmapc.split('static void	free_pv_chunk(struct pv_chunk *pc);')
-    pmap_bottom = 'static void	free_pv_chunk(struct pv_chunk *pc);' + pmap_bottom
-    with open('pmap_candidate.c', 'w') as pmapc_candidate:
-        pmapc_candidate.write(pmapc_top)
-        pmapc_candidate.write(new_declarations)
-        pmapc_candidate.write(pmap_bottom)
-        pmapc_candidate.write(additions())
+    pmapc_replaces = [('mtx_lock(', 'mtx_lock_spin('),
+        ('mtx_unlock(', 'mtx_unlock_spin('),
+        ('rw_wlock(', 'rw_wlock_spin('),
+        ('rw_rlock(', 'rw_rlock_spin(')]
+
+    for old, new in pmapc_replaces:
+        pmapc = pmapc.replace(old, new)
+
+    split_ab = '#define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)'
+    split_bc = 'static void	free_pv_chunk(struct pv_chunk *pc);'
+    split_idx_ab = pmapc.find(split_ab) + len(split_ab)
+    split_idx_bc = pmapc.find(split_bc)
+    pmapc_a, pmapc_b, pmapc_c = pmapc[ : split_idx_ab], pmapc[split_idx_ab : split_idx_bc], pmapc[split_idx_bc : ]
+
+    with open(pmapc_dest, 'w') as dest:
+        dest.write(pmapc_a)
+        dest.write(lock_defines)
+        dest.write(pmapc_b)
+        dest.write(new_declarations)
+        dest.write(pmapc_c)
+        dest.write(end_additions())
+
+    # PMAP H in the include
+    pmaph_backup = '../include/pmap~.h'
+    pmaph_src = '../include/pmap.h'
+    pmaph_dest = '../include/pmap.h'
+    #pmaph_dest = '../include/pmap_candidate.h'
+
+    assert pmaph_backup != pmaph_dest
+    if not os.path.isfile(pmaph_backup):
+        shutil.copy2(pmaph_src, pmaph_backup)
+
+    pmaph = None
+    with open(pmaph_backup, 'r') as pmaph:
+        pmaph = pmaph.read()
+    
+    pmaph_replaces = [('mtx_lock(', 'mtx_lock_spin('),
+        ('mtx_unlock(', 'mtx_unlock_spin(')]
+    for old, new in pmaph_replaces:
+        pmaph = pmaph.replace(old, new)
+
+    with open(pmaph_dest, 'w') as dest:
+        dest.write(pmaph)
         

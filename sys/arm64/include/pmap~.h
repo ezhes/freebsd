@@ -132,7 +132,7 @@ extern struct pmap	kernel_pmap_store;
 
 #define	PMAP_ASSERT_LOCKED(pmap) \
 				mtx_assert(&(pmap)->pm_mtx, MA_OWNED)
-#define	PMAP_LOCK(pmap)		mtx_lock_spin(&(pmap)->pm_mtx)
+#define	PMAP_LOCK(pmap)		mtx_lock(&(pmap)->pm_mtx)
 #define	PMAP_LOCK_ASSERT(pmap, type) \
 				mtx_assert(&(pmap)->pm_mtx, (type))
 #define	PMAP_LOCK_DESTROY(pmap)	mtx_destroy(&(pmap)->pm_mtx)
@@ -141,7 +141,7 @@ extern struct pmap	kernel_pmap_store;
 #define	PMAP_OWNED(pmap)	mtx_owned(&(pmap)->pm_mtx)
 #define	PMAP_MTX(pmap)		(&(pmap)->pm_mtx)
 #define	PMAP_TRYLOCK(pmap)	mtx_trylock(&(pmap)->pm_mtx)
-#define	PMAP_UNLOCK(pmap)	mtx_unlock_spin(&(pmap)->pm_mtx)
+#define	PMAP_UNLOCK(pmap)	mtx_unlock(&(pmap)->pm_mtx)
 
 #define	ASID_RESERVED_FOR_PID_0	0
 #define	ASID_RESERVED_FOR_EFI	1
