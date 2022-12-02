@@ -182,6 +182,42 @@ __FBSDID("$FreeBSD$");
 #define	pmap_l1_pindex(v)	(NUL2E + ((v) >> L1_SHIFT))
 #define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)
 
+/*
+* White list for pmap function to check arguments 
+*/
+typedef struct pmap_whitelist {
+       *pmap_t *whitelist;
+       size_t used;
+       size_t size;
+} pmap_whitelist_t; 
+
+void whitelist_init(pmap_whitelist_t *pmap_whitelist, size_t initialSize) {
+       pmap_whitelist->whitelist = malloc(initialSize * sizeof(*pmap_t));
+       pmap_whitelist->used = 0;
+       pmap_whitelist->size = initialSize;
+       return;
+}
+
+void whitelist_append(pmap_whitelist_t *pmap_whitelist, *pmap_t pmap) {
+       if (pmap_whitelist->used == pmap_whitelist->size) {
+               pmap_whitelist->size *= 2;
+               pmap_whitelist->whitelist = realloc(pmap_whitelist->whitelist, pmap_whitelist->size * sizeof(*pmap_t));
+       }
+       pmap_whitelist->whitelist[pmap_whitelist->used++] = pmap;
+       return;
+}
+/* Check if a pmap is in whitelist */
+bool valid_pmap(pmap_whitelist_t *pmap_whitelist, *pmap_t pmap) {
+       for (int i = 0; i < pmap_whitelist->size; i++) {
+               if (pmap_whitelist->whitelist[i] == pmap) {
+                       return true;
+               }
+       }
+       return false;
+}
+
+/* ============================================= */
+
 static struct md_page *
 pa_to_pvh(vm_paddr_t pa)
 {
