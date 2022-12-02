@@ -73,6 +73,8 @@ vm_kern // has vm_maps
 vm_page
 vm_phys
 
+vmspace_alloc
+
 ## Interesting structs & fns
 
 struct vmspace { !! owns pmap
