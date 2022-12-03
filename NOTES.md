@@ -89,13 +89,93 @@ What to do with extern fn's `pmap_clean_stage2_tlbi` and `pmap_invalidate_vpipt_
 
 ## functions that might map protected phys page into an attacker pmap
 
+### need
+
 pmap_copy
+pmap_sync_icache
+pmap_extract_and_hold -- gets va
+pmap_extract -- gets physical address
+pmap_map -- public PHYS_TO_DMAP
+
+### protect priority 1
+
+pmap_kenter
+pmap_enter
+pmap_enter_object
+pmap_enter_quick
+
+### dunno
+
+pmap_protect
+
+### private
+
+pmap_pte
+
+### protection code
+
+```c
+// each value is 4 bytes, but counter & protection will fit in 1 byte
+// lowest bit is for protected bool
+extern uint32_t pmap_pageuse[];
+
+#define pageuse_pageid(pa) pa >> L3_SHIFT
+#define pageuse_storagesize 32
+#define pageuse_fieldbits 2
+#define pageuse_fieldmask (1 << pageuse_fieldbits) - 1
+#define pageuse_fieldsize pageuse_storagesize / (1 << pageuse_fieldbits)
+#define pageuse_pageid_bitpos(pageid) (pageid & pageuse_fieldmask) * pageuse_fieldsize
+```
+
+#### enter
+
+```c
+vm_paddr_t ppage_id = pageuse_pageid(pa);
+uint32_t ppage_id_bitpos = pageuse_pageid_bitpos(ppage_id);
+ppage_id = ppage_id >> pageuse_fieldbits;
+uint32_t increment = 0b10 << ppage_id_bitpos;
+// add must be before check
+atomic_add_32(pmap_pageuse + ppage_id, increment);
+if (pmap_pageuse[ppage_id] >> ppage_id_bitpos & 1) {
+    panic("violating pmap_pageuse, pa: 0x%lx", pa);
+}
+if (pmap_pageuse[ppage_id] >> ppage_id_bitpos == 0) {
+    // todo: this check is not thread safe -- can miss the overflow
+    panic("pmap_pageuse overflow, pa: 0x%lx", pa);
+}
+```
+
+#### remove
+
+```c
+vm_paddr_t ppage_id = pageuse_pageid(pa);
+uint32_t ppage_id_bitpos = pageuse_pageid_bitpos(ppage_id);
+ppage_id = ppage_id >> pageuse_fieldbits;
+uint32_t increment = 0b10 << ppage_id_bitpos;
+atomic_sub_32(pmap_pageuse + p_page, increment);
+```
+
+#### protected enter
+
+```c
+vm_paddr_t ppage_id = pageuse_pageid(pa);
+uint32_t ppage_id_bitpos = pageuse_pageid_bitpos(ppage_id);
+ppage_id = ppage_id >> pageuse_fieldbits;
+uint32_t protected = 0b1 << ppage_id_bitpos;
+uint32_t old_pageuse = pmap_pageuse[ppage_id];
+do {
+    // todo: assumes that page starts mapped in dmap and nowhere else
+    if (old_pageuse & protected || (old_pageuse >> ppage_id_bitpos) > 0b10) {
+        panic("protected map failed on already-mapped page, pa: 0x%lx", pa);
+    }
+} while (atomic_fcmpset_32(pmap_pageuse + ppage_id, &old_pageuse, old_pageuse & protected));
+pmap_remove_zoned(kernel_pmap, PHYS_TO_DMAP(pa & (~L3_SIZE)), PHYS_TO_DMAP((pa & (~L3_SIZE)) + 1));
+```
+
+### safe
+
 pmap_copy_page
 pmap_copy_pages
-pmap_extract
-pmap_extract_and_hold
-pmap_map
-pmap_protect
 
 ## lock notes
 
