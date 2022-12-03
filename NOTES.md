@@ -212,3 +212,16 @@ rw_runlock
 ### inlcude pmap.h
 
 PMAP_LOCK etc.
+
+## debugging
+
+exception link register -- thing before interrupt maybe
+p/x $ELR_EL1
+
+view some assembly instrs
+x/10i instr
+
+view symbol that instr is a part of
+p/a instr
+
+exception.S:269
