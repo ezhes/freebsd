@@ -19,9 +19,9 @@
 extern void *__zm_ro_begin;
 extern void *__zm_ro_end;
 
-static void * dispatch_test(void *aux);
+static u_int64_t dispatch_test(void *aux);
 
-extern void *dispatch_test_nop(void *aux);
+extern u_int64_t dispatch_test_nop(void *aux);
 
 ZM_RO zm_globals_s *zm_globals = NULL;
 ZM_RO zm_pcpu_s *zm_pcpus = NULL;
@@ -138,7 +138,7 @@ init_startup(void *arg __unused) {
         :: "r" ((u_int64_t)(1LU << 31))
     );
 
-    void *result;
+    u_int64_t result;
     __asm__ volatile("isb\nmrs %0, pmccntr_el0\nisb" : "=r" (start));
     for (int i = 0; i < 100000; i++) {
         result = zm_zone_enter(ZONE_STATE_PMAP, (void *)0);
@@ -167,7 +167,7 @@ init_startup(void *arg __unused) {
 /* Start after SMP is up so that we can rendezvous. */
 SYSINIT(init_startup, SI_SUB_SMP, SI_ORDER_SECOND, init_startup, NULL);
 
-static void * dispatch_test(void *aux) {
+static u_int64_t dispatch_test(void *aux) {
     printf("[pmap] Hello from pmap! Got aux=%p\n", aux);
-    return (void *)0x42424242;
+    return (u_int64_t) 0x42424242;
 }

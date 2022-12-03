@@ -5,7 +5,7 @@
 #include <machine/zone_manager_asm.h>
 #define ZM_RO __attribute__((section(".zm_ro")))
 
-typedef void * (*zm_zone_dispatch_fcn_t)(void *);
+typedef u_int64_t (*zm_zone_dispatch_fcn_t)(void *);
 
 
 typedef struct zm_pcpu {
