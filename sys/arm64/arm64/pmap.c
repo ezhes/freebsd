@@ -3323,7 +3323,7 @@ pmap_protect_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t sva, pt_entry_t mask,
 		return;
 
 	while (!atomic_fcmpset_64(l2, &old_l2, (old_l2 & ~mask) | nbits))
-		cpu_spinwait();
+		;
 
 	/*
 	 * When a dirty read/write superpage mapping is write protected,
@@ -3448,7 +3448,7 @@ pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot
 
 			while (!atomic_fcmpset_64(l3p, &l3, (l3 & ~mask) |
 			    nbits))
-				cpu_spinwait();
+				;
 
 			/*
 			 * When a dirty read/write mapping is write protected,
@@ -5573,7 +5573,7 @@ retry:
 		if ((oldpte & ATTR_SW_DBM) != 0) {
 			while (!atomic_fcmpset_64(pte, &oldpte,
 			    (oldpte | ATTR_S1_AP_RW_BIT) & ~ATTR_SW_DBM))
-				cpu_spinwait();
+				;
 			if ((oldpte & ATTR_S1_AP_RW_BIT) ==
 			    ATTR_S1_AP(ATTR_S1_AP_RW))
 				vm_page_dirty(m);
@@ -5865,7 +5865,7 @@ pmap_advise_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, int advice)
 				while (!atomic_fcmpset_long(l3, &oldl3,
 				    (oldl3 & ~ATTR_AF) |
 				    ATTR_S1_AP(ATTR_S1_AP_RO)))
-					cpu_spinwait();
+					;
 			} else if ((oldl3 & ATTR_AF) != 0)
 				pmap_clear_bits(l3, ATTR_AF);
 			else
@@ -5939,7 +5939,7 @@ restart:
 			oldl3 = pmap_load(l3);
 			while (!atomic_fcmpset_long(l3, &oldl3,
 			    (oldl3 & ~ATTR_SW_DBM) | ATTR_S1_AP(ATTR_S1_AP_RO)))
-				cpu_spinwait();
+				;
 			vm_page_dirty(m);
 			pmap_invalidate_page(pmap, va);
 		}

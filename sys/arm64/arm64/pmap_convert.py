@@ -354,10 +354,14 @@ if __name__ == "__main__":
     pmapc_replaces = [('mtx_lock(', 'mtx_lock_spin('),
         ('mtx_unlock(', 'mtx_unlock_spin('),
         ('rw_wlock(', 'rw_wlock_spin('),
-        ('rw_rlock(', 'rw_rlock_spin(')]
+        ('rw_rlock(', 'rw_rlock_spin('),
+        ('cpu_spinwait();', ';')]
 
     for old, new in pmapc_replaces:
         pmapc = pmapc.replace(old, new)
+    
+    if pmapc.find('cpu_spinwait') != -1:
+        eee('spinwait not removed')
 
     split_ab = '#define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)'
     split_bc = 'static void	free_pv_chunk(struct pv_chunk *pc);'
