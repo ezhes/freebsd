@@ -23,11 +23,13 @@ static u_int64_t dispatch_test(void *aux);
 
 extern u_int64_t dispatch_test_nop(void *aux);
 
+extern u_int64_t pmap_dispatch(void *aux);
+
 ZM_RO zm_globals_s *zm_globals = NULL;
 ZM_RO zm_pcpu_s *zm_pcpus = NULL;
 ZM_RO u_int32_t zm_pcpu_count;
 const zm_zone_dispatch_fcn_t zm_dispatch_functions[] = {
-    /* ZONE_STATE_PMAP */           dispatch_test,
+    /* ZONE_STATE_PMAP */           pmap_dispatch,
     /* ZONE_STATE_CAPABILITIES */   dispatch_test
 };
 
