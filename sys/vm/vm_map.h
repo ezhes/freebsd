@@ -301,7 +301,7 @@ struct vmspace {
 	 * structure on a single architecture don't result in offset
 	 * variations of the machine-independent fields in the vmspace.
 	 */
-	struct pmap *vm_pmap;	/* private physical map */
+	struct pmap vm_pmap;	/* private physical map */
 };
 
 #ifdef	_KERNEL
