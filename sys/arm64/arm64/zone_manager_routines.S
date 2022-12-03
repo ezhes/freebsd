@@ -215,7 +215,7 @@ ENTRY(zm_zone_enter)
 
 	/* Is the zone ID valid? Note that we compare x0, which enforces [63:32]=0*/
 	cmp x0, #ZONE_STATE_POS_MAX
-	b.cs Lzm_zone_enter_oob_zone_id
+	b.hi Lzm_zone_enter_oob_zone_id
 
 	/* 
 	Load the dispatch function -- we do this as early as possible for
@@ -245,6 +245,7 @@ necessary.
 	bl outlined_get_secure_pcpu_ptr
 #endif
 	get_secure_pcpu_ptr x9
+	cbz x9, Learly_boot_bail
 
 	/* 
 	Load the stack pointer for this zone 
@@ -334,6 +335,21 @@ necessary.
 	ldp x10, lr, [sp], #0x10
 	mov sp, x10
 	ret 
+
+Learly_boot_bail:
+	/*
+	We've attempted to call a function through the zone manager before the
+	zone manager was initilized. Since the zone manager is not yet enforcing, 
+	we can simply call through on our same stack without manipulating the
+	watchpoints.
+	*/
+	ZM_EXIT x15
+	/* Move argument into place */
+	mov x0, x1
+	/* Restore lr since we're not coming back... */
+	mov lr, x14
+	/* Yeet :) */
+	br x13
 
 Lzm_zone_enter_oob_zone_id:
 	adrp x0, Lzm_zone_enter_oob_zone_id_str
