@@ -97,6 +97,13 @@ pmap_extract_and_hold -- gets va
 pmap_extract -- gets physical address
 pmap_map -- public PHYS_TO_DMAP
 
+### removes (tails)
+
+pmap_remove_pt_page -- from remove_pages
+pmap_unuse_pt -- from remove_all
+pmap_kremove
+pmap_remove
+
 ### protect priority 1
 
 pmap_kenter
@@ -114,17 +121,24 @@ pmap_pte
 
 ### protection code
 
+physmem_avail // still don't know how to get amnt of physical mem though
+
 ```c
+// into top of pmap.c
 // each value is 4 bytes, but counter & protection will fit in 1 byte
 // lowest bit is for protected bool
-extern uint32_t pmap_pageuse[];
+uint32_t *pmap_pageuse;
 
-#define pageuse_pageid(pa) pa >> L3_SHIFT
+#define pageuse_pageid(pa) (pa) >> L3_SHIFT
 #define pageuse_storagesize 32
 #define pageuse_fieldbits 2
-#define pageuse_fieldmask (1 << pageuse_fieldbits) - 1
-#define pageuse_fieldsize pageuse_storagesize / (1 << pageuse_fieldbits)
-#define pageuse_pageid_bitpos(pageid) (pageid & pageuse_fieldmask) * pageuse_fieldsize
+#define pageuse_fieldmask ((1 << pageuse_fieldbits) - 1)
+#define pageuse_fieldsize (pageuse_storagesize / (1 << pageuse_fieldbits))
+#define pageuse_pageid_bitpos(pageid) ((pageid) & pageuse_fieldmask) * pageuse_fieldsize
+```
+
+```c
+
 ```
 
 #### enter
@@ -148,11 +162,15 @@ if (pmap_pageuse[ppage_id] >> ppage_id_bitpos == 0) {
 #### remove
 
 ```c
-vm_paddr_t ppage_id = pageuse_pageid(pa);
-uint32_t ppage_id_bitpos = pageuse_pageid_bitpos(ppage_id);
-ppage_id = ppage_id >> pageuse_fieldbits;
-uint32_t increment = 0b10 << ppage_id_bitpos;
-atomic_sub_32(pmap_pageuse + p_page, increment);
+static __inline void
+decrement(vm_paddr_t pa)
+{
+    vm_paddr_t ppage_id = pageuse_pageid(pa);
+    uint32_t ppage_id_bitpos = pageuse_pageid_bitpos(ppage_id);
+    ppage_id = ppage_id >> pageuse_fieldbits;
+    uint32_t increment = 0b10 << ppage_id_bitpos;
+    atomic_sub_32(pmap_pageuse + p_page, increment);
+}
 ```
 
 #### protected enter
