@@ -249,8 +249,22 @@ llvm-objdump-14 -D path/to/kernel --start-address=your_address | less
 
 ## allocation
 
-alloc_pages
-vmem_alloc
-vm_page_alloc_noobj <- vm_alloc_wired, vm_alloc_interrupt, vm_alloc_zero, vm_alloc_waitok
-kva_alloc
-kmem_malloc
+### init relevant
+
+alloc_pages(var, np)
+^^^ in bootstrap, can ignore for now?
+
+kmem_malloc(vm_size_t size, int flags)
+^^^ wtf, can't ignore tho
+
+### rest
+
+vmem_alloc(vmem_t *vm, vmem_size_t size, int flags, vmem_addr_t *addrp)
+^^^ normal looking
+
+vm_page_alloc_noobj(int req) <- vm_alloc_wired, vm_alloc_interrupt, vm_alloc_zero, vm_alloc_waitok
+^^^^^^^^^^ pass in VM_ALLOC_NOWAIT probably; wtf is vm_alloc_interrupt
+
+kva_alloc(vm_size_t size)
+^^^ no underlying memory, whack af
+
