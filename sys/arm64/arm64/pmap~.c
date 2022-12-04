@@ -1774,7 +1774,8 @@ pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels) //pmap is a do
 	 * allocate the l0 page
 	 */
 	m = vm_page_alloc_noobj(VM_ALLOC_WAITOK | VM_ALLOC_WIRED |
-	    VM_ALLOC_ZERO); 
+	    VM_ALLOC_ZERO);    
+	// notice m is alloced to 
 	*pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
 	*pmap->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP(*pmap->pm_l0_paddr); // actual map pointer here
 
