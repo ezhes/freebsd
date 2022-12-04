@@ -1,0 +1,1 @@
+rsync -arvz -e 'ssh -p 10022' -arvz -e 'ssh -p 10022 -p 10022' ../obj/home/evgeny/shiny/src/arm64.aarch64/sys/GENERIC/kernel free@localhost:/boot/kernel/kernel --progress
