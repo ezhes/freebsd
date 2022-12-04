@@ -247,7 +247,9 @@ if __name__ == "__main__":
             eee('Wrong cwd, please run from ...your project.../src or .../src/sys/arm64/arm64')
             exit()
 
+    # toggles that have dependencies/ may not compile/ run
     pmap_check_toggle = True
+    pmap_allocations_toggle = True
 
     pmapc_backup = 'pmap~.c'
     pmapc_src = 'pmap.c'
@@ -295,7 +297,7 @@ if __name__ == "__main__":
         return func.name + '_zoned'
 
     def validate_pmap(pmap):
-        return '\n\tif (!pmap_valid_pmap(pmap_whitelist, ' + pmap + ')) {\n\t\tpanic("Invalid ' + pmap + ' in argument");\n\t}\n'
+        return '\n\tif (!pmap_valid_pmap(pmap_whitelist, ' + pmap + ')) {\n\t\tpanic("Invalid ' + pmap + ' in argument");\n\t}'
 
     lock_defines = '\n\n#define rw_wlock_spin(lockp)\tdo { } while (!rw_try_wlock(lockp))\n#define rw_rlock_spin(lockp)\tdo { } while (!rw_try_rlock(lockp))'
 
@@ -393,24 +395,28 @@ if __name__ == "__main__":
 
             pmap_names = []
 
-            words = re.split(',| ', search)
+            words = re.split(',| |\)', search)
             for idx, word in enumerate(words):
                 if 'pmap_t' not in word:
                     continue
                 if idx == len(words) - 1:
                     eee('no next word in', search)
+                    continue
                 nextw = words[idx + 1].strip()
                 if '*' in nextw:
-                    www('* found in ', nextw, 'when doing', search)
+                    eee('* found in ', nextw, 'when doing', search)
+                    continue
+                if '*' in word:
+                    eee('* found in ', word, 'when doing', search)
                     continue
 
                 pmap_names.append(nextw)
             
             if len(pmap_names) == 0:
-                eee('pmap_t not found in', search)
+                eee('pmap_t argname not found in', search)
 
 
-            rep_with = search + ''.join([validate_pmap(pmap) for pmap in pmap_names])
+            rep_with = search + ''.join([validate_pmap(pmap) for pmap in pmap_names]) + '\n'
             pmapc = pmapc.replace(search, rep_with)
 
     split_ab = '#define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)'
