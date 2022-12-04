@@ -237,6 +237,16 @@ class Func:
         return fail
     
 if __name__ == "__main__":
+    cwd = os.getcwd()
+    if 'src/sys/arm64/arm64' not in cwd:
+        if 'src' in cwd:
+            print('Attempting to enter ...your project.../src/sys/arm64/arm64')
+            os.chdir('sys/arm64/arm64')
+            cwd = os.getcwd()
+        if 'src/sys/arm64/arm64' not in cwd:
+            eee('Wrong cwd, please run from ...your project.../src or .../src/sys/arm64/arm64')
+            exit()
+
     pmap_check_toggle = True
 
     pmapc_backup = 'pmap~.c'
