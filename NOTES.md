@@ -225,3 +225,9 @@ view symbol that instr is a part of
 p/a instr
 
 exception.S:269
+
+exception reason:
+$ESR_EL1
+
+objdump
+llvm-objdump-14 -D path/to/kernel --start-address=your_address | less
