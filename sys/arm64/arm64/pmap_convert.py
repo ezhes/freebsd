@@ -237,6 +237,8 @@ class Func:
         return fail
     
 if __name__ == "__main__":
+    pmap_check_toggle = True
+
     pmapc_backup = 'pmap~.c'
     pmapc_src = 'pmap.c'
     pmapc_dest = 'pmap.c'
@@ -281,6 +283,8 @@ if __name__ == "__main__":
 
     def zoned_name(func: Func):
         return func.name + '_zoned'
+
+    validate_pmap = '\n\tif (!pmap_valid_pmap(pmap_whitelist, pmap)) {\n\t\tpanic("Invalid pmap in argument");\n\t}\n'
 
     lock_defines = '\n\n#define rw_wlock_spin(lockp)\tdo { } while (!rw_try_wlock(lockp))\n#define rw_rlock_spin(lockp)\tdo { } while (!rw_try_rlock(lockp))'
 
@@ -359,9 +363,19 @@ if __name__ == "__main__":
 
     for old, new in pmapc_replaces:
         pmapc = pmapc.replace(old, new)
-    
-    if pmapc.find('cpu_spinwait') != -1:
-        eee('spinwait not removed')
+
+    if pmap_check_toggle:
+        lines = pmapc.split('\n')
+        for idx, line in enumerate(lines):
+            if '_zoned(pmap_t' not in line:
+                continue
+            if not (lines[idx + 1].strip() == '{'):
+                line += '\n' + lines[idx + 1]
+                idx += 1
+                if lines[idx + 1].strip() != '{':
+                    eee('failing to find { in:\n', line, '\n', lines[idx+1])
+            search = line + '\n' + lines[idx+1]
+            pmapc = pmapc.replace(search, search + validate_pmap)
 
     split_ab = '#define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)'
     split_bc = 'static void	free_pv_chunk(struct pv_chunk *pc);'
