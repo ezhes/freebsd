@@ -216,18 +216,41 @@ PMAP_LOCK etc.
 ## debugging
 
 exception link register -- thing before interrupt maybe
+
+```bash
 p/x $ELR_EL1
+```
 
 view some assembly instrs
+
+```bash
 x/10i instr
+```
 
 view symbol that instr is a part of
+
+```bash
 p/a instr
+```
 
 exception.S:269
 
 exception reason:
+
+```bash
 $ESR_EL1
+```
 
 objdump
+
+```bash
 llvm-objdump-14 -D path/to/kernel --start-address=your_address | less
+```
+
+## allocation
+
+alloc_pages
+vmem_alloc
+vm_page_alloc_noobj <- vm_alloc_wired, vm_alloc_interrupt, vm_alloc_zero, vm_alloc_waitok
+kva_alloc
+kmem_malloc
