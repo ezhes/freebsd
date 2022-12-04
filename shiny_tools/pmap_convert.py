@@ -1,5 +1,6 @@
 import os
 import shutil
+import re
 
 publics = 'void pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma);\
     void	pmap_activate_vm(pmap_t);\
@@ -124,13 +125,12 @@ class Func:
 
         # search_def 
         for word_white in declaration.split():
-            for word_comma_w in word_white.split(','):
-                for word in word_comma_w.split(')'):
-                    if '(' in word:
-                        if self.name:
-                            eee('double (')
-                            exit()
-                        self.search_def = word.strip('*')
+            for word in re.split(',|\)', word_white):
+                if '(' in word:
+                    if self.name:
+                        eee('double (')
+                        exit()
+                    self.search_def = word.strip('*')
         
         # return type and name
         self.name = self.search_def.split('(')[0]
@@ -294,7 +294,8 @@ if __name__ == "__main__":
     def zoned_name(func: Func):
         return func.name + '_zoned'
 
-    validate_pmap = '\n\tif (!pmap_valid_pmap(pmap_whitelist, pmap)) {\n\t\tpanic("Invalid pmap in argument");\n\t}\n'
+    def validate_pmap(pmap):
+        return '\n\tif (!pmap_valid_pmap(pmap_whitelist, ' + pmap + ')) {\n\t\tpanic("Invalid ' + pmap + ' in argument");\n\t}\n'
 
     lock_defines = '\n\n#define rw_wlock_spin(lockp)\tdo { } while (!rw_try_wlock(lockp))\n#define rw_rlock_spin(lockp)\tdo { } while (!rw_try_rlock(lockp))'
 
@@ -377,7 +378,11 @@ if __name__ == "__main__":
     if pmap_check_toggle:
         lines = pmapc.split('\n')
         for idx, line in enumerate(lines):
+            if '_zoned' not in line:
+                continue
             if '_zoned(pmap_t' not in line:
+                if 'pmap_t' in lines[idx + 1]:
+                    eee('unexpected pmap_t in second line of: ', line + '\n' + line[idx+1])
                 continue
             if not (lines[idx + 1].strip() == '{'):
                 line += '\n' + lines[idx + 1]
@@ -385,7 +390,28 @@ if __name__ == "__main__":
                 if lines[idx + 1].strip() != '{':
                     eee('failing to find { in:\n', line, '\n', lines[idx+1])
             search = line + '\n' + lines[idx+1]
-            pmapc = pmapc.replace(search, search + validate_pmap)
+
+            pmap_names = []
+
+            words = re.split(',| ', search)
+            for idx, word in enumerate(words):
+                if 'pmap_t' not in word:
+                    continue
+                if idx == len(words) - 1:
+                    eee('no next word in', search)
+                nextw = words[idx + 1].strip()
+                if '*' in nextw:
+                    www('* found in ', nextw, 'when doing', search)
+                    continue
+
+                pmap_names.append(nextw)
+            
+            if len(pmap_names) == 0:
+                eee('pmap_t not found in', search)
+
+
+            rep_with = search + ''.join([validate_pmap(pmap) for pmap in pmap_names])
+            pmapc = pmapc.replace(search, rep_with)
 
     split_ab = '#define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)'
     split_bc = 'static void	free_pv_chunk(struct pv_chunk *pc);'
