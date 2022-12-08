@@ -251,20 +251,63 @@ llvm-objdump-14 -D path/to/kernel --start-address=your_address | less
 
 ### init relevant
 
-alloc_pages(var, np)
-^^^ in bootstrap, can ignore for now?
-
-kmem_malloc(vm_size_t size, int flags)
-^^^ wtf, can't ignore tho
+* alloc_pages(var, np)
+  * in `pmap_bootstrap_zoned`
+  * allocated things in the pre-vm time, so should be fine
+* kmem_malloc(vm_size_t size, int flags)
+  * in `pmap_init_asids` and `pmap_init_zoned`
+  * TODO replace with `smh_calloc`
 
 ### rest
 
-vmem_alloc(vmem_t *vm, vmem_size_t size, int flags, vmem_addr_t *addrp)
-^^^ normal looking
+* vmem_alloc(vmem_t *vm, vmem_size_t size, int flags, vmem_addr_t *addrp)
+  * in `pmap_map_io_transient_zoned`
+  * `pmap_map_io_transient_zoned` is never called, so replacing with panic
+* vm_page_alloc_noobj(int req)
+  * seen attrs: vm_alloc_wired, vm_alloc_interrupt, vm_alloc_zero, vm_alloc_waitok
+  * can pass VM_ALLOC_NOWAIT
+  * TODO replace with `smh_calloc`, seems to be just getting page table pages
+* kva_alloc(vm_size_t size)
+  * allocates VA only, not actual memory
+  * used in conjunction with `pmap_kenter_zoned` to add a phys page somewhere in kernel, later remove
+  * `kva_alloc` in `pmap_demote_l1` and `pmap_demote_l2_locked`: need to replace `pmap_kenter_zoned` with an internal-only version so that secure processes can use that and `pmap_kenter_zoned` can be disallowed for secure processes.
+  * `kva_alloc` in `pmap_mapbios_zone`: seems to be for kernel work; can try replacing with smh but probably not
 
-vm_page_alloc_noobj(int req) <- vm_alloc_wired, vm_alloc_interrupt, vm_alloc_zero, vm_alloc_waitok
-^^^^^^^^^^ pass in VM_ALLOC_NOWAIT probably; wtf is vm_alloc_interrupt
+### vm_page_alloc_noobj(int req)
 
-kva_alloc(vm_size_t size)
-^^^ no underlying memory, whack af
-
+* `vm_domainset_iter_page_init(struct`
+  * safe: `vm_domainset_iter_init(struct`
+    * safe: `vm_object_reserv(vm_object_t`
+  * safe: `vm_domainset_iter_first(struct`
+    * safe: `PCPU_GET` & `DOMAINSET_ISSET`
+    * safe: `vm_domainset_iter_rr(struct`
+    * safe: `vm_domainset_iter_interleave(struct`
+  * safe: `vm_page_count_min_domain(`
+  * `vm_domainset_iter_page(struct`
+    * lock safe: `VM_OBJECT_WUNLOCK` -- `obj` is `NULL`
+    * above safe: `vm_page_count_min_domain` `vm_domainset_iter_first`
+    * safe: `vm_domainset_iter_next(struct`
+      * safe: `vm_domainset_iter_rr(struct`
+      * safe: `vm_domainset_iter_prefer(struct`
+    * **BAD** sleeps, locks: `vm_wait_doms(const`
+      * safe: `vm_page_count_min_set(const`
+* `vm_page_alloc_noobj_domain(int` -> `_vm_page_alloc_noobj_domain(int`
+  * safe: `VM_DOMAIN(n)`
+  * **BAD**: `uma_zalloc`
+  * **BAD**: `pmap_zero_page`
+  * `vm_domain_allocate(struct` -> `_vm_domain_allocate(struct`
+    * safe : `vm_paging_needed`
+    * **BAD** locks: `pagedaemon_wakeup(int`
+      * **BAD** wakeup: `wakeup(const`
+    * **BAD** locks: `vm_domain_set(struct`
+  * : `vm_domain_free_lock`
+  * : `vm_phys_alloc_pages`
+  * : `vm_phys_alloc_freelist_pages`
+  * : `vm_domain_free_unlock`
+  * : `vm_domain_freecnt_inc`
+  * : `vm_reserv_reclaim_inactive`
+  * : `vm_domain_alloc_fail`
+  * : `vm_page_dequeue`
+  * : `vm_page_alloc_check`
+  * : `vm_wire_add`
+* above bad: `vm_domainset_iter_page(struct`

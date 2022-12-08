@@ -248,8 +248,7 @@ if __name__ == "__main__":
             exit()
 
     # toggles that have dependencies/ may not compile/ run
-    pmap_check_toggle = True
-    pmap_allocations_toggle = True
+    pmap_check_toggle = False
 
     pmapc_backup = 'pmap~.c'
     pmapc_src = 'pmap.c'
@@ -291,7 +290,6 @@ if __name__ == "__main__":
 
     # construct the code
     preface = '\n/*\n * unzoned calls into priveleged instructions\n */\n\n'
-    preface += '#include <machine/zone_manager.h>\n'
 
     def zoned_name(func: Func):
         return func.name + '_zoned'
@@ -315,6 +313,7 @@ if __name__ == "__main__":
 
 
     transfer_type = 'uint64_t'
+    secure_calloc = 'smh_calloc(&pmap_heap, '
     struct = '\nstruct pmap_call {\n\tenum pmap_external_fn func;\n\t' + transfer_type + ' * args;\n};\n'
 
     
@@ -377,6 +376,65 @@ if __name__ == "__main__":
     for old, new in pmapc_replaces:
         pmapc = pmapc.replace(old, new)
 
+    def scope_call_replace():
+        global pmapc
+        def match_multiline(lines, idx: int, match: str, endmatch_options):
+            maxdelta = 2
+            if match not in lines[idx]:
+                return None
+            for endmatch in endmatch_options:
+                for delta in range(0, maxdelta + 1):
+                    if endmatch in lines[idx + delta]:
+                        return '\n'.join(lines[idx : idx+delta+1]).strip()
+            eee('>2 multiline in:', lines[idx : idx + maxdelta + 1])
+            return None
+        def get_call_arg(call: str, arg_idx: int):
+            paren_open_idx = call.find('(')
+
+            for idx, word in enumerate(call[paren_open_idx + 1:-1].split(',')):
+                if idx == arg_idx:
+                    return word.strip()
+
+            eee('get_call_arg: failed to find arg_idx', arg_idx, 'in', line)
+
+        pmapc_call_replaces = [
+            ('kmem_malloc(',
+                lambda call:
+                    secure_calloc + get_call_arg(call, 0) + ', 1)'),
+            ('vmem_alloc(',
+                lambda call: '0;\n\t\t\t/*' + call + '*/\n\t\t\tpanic("pmap_map_io_transient_zoned: this should never have been called")'),
+            ('vm_page_alloc_noobj(',
+                lambda _call: secure_calloc + 'PAGE_SIZE, 1)'),
+            ]
+        lines = pmapc.split('\n')
+        for idx in range(len(lines)):
+            for old, get_new in pmapc_call_replaces:
+                line = match_multiline(lines, idx, old, [';', '{'])
+                if not line:
+                    continue
+                def eee_context(msg):
+                    eee('call replaces: when doing old', old, msg, 'in line', line)
+                if line.count(old) != 1:
+                    eee_context('multiple olds')
+                _precall, post_old = line.split(old)
+
+                open_brackets = 1
+                call, _post_call = None, None
+                for idx, ch in enumerate(post_old):
+                    if ch == '(':
+                        open_brackets += 1
+                    elif ch == ')':
+                        open_brackets -= 1
+                        if open_brackets == 0:
+                            call = old + post_old[:idx + 1]
+                            _post_call = post_old[idx + 1:]
+                            break
+                if open_brackets != 0:
+                    eee_context('failed to find end of call; open_brackets = ' + str(open_brackets))
+                
+                pmapc = pmapc.replace(call, get_new(call))
+    scope_call_replace()
+
     if pmap_check_toggle:
         lines = pmapc.split('\n')
         for idx, line in enumerate(lines):
@@ -419,18 +477,20 @@ if __name__ == "__main__":
             rep_with = search + ''.join([validate_pmap(pmap) for pmap in pmap_names]) + '\n'
             pmapc = pmapc.replace(search, rep_with)
 
-    split_ab = '#define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)'
-    split_bc = 'static void	free_pv_chunk(struct pv_chunk *pc);'
-    split_idx_ab = pmapc.find(split_ab) + len(split_ab)
-    split_idx_bc = pmapc.find(split_bc)
-    pmapc_a, pmapc_b, pmapc_c = pmapc[ : split_idx_ab], pmapc[split_idx_ab : split_idx_bc], pmapc[split_idx_bc : ]
+    # insertions
+    pmapc = pmapc.replace(
+            '#define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)',
+            '#define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)' + lock_defines
+        ).replace(
+            'static void	free_pv_chunk(struct pv_chunk *pc);',
+            new_declarations + 'static void	free_pv_chunk(struct pv_chunk *pc);'
+        ).replace(
+            '#include <machine/pcb.h>\n',
+            '#include <machine/pcb.h>\n#include <machine/zone_manager.h>\n#include <sys/secure_memory_heap.h>\n\nextern struct secure_memory_heap pmap_heap;\n'
+        )
 
     with open(pmapc_dest, 'w') as dest:
-        dest.write(pmapc_a)
-        dest.write(lock_defines)
-        dest.write(pmapc_b)
-        dest.write(new_declarations)
-        dest.write(pmapc_c)
+        dest.write(pmapc)
         dest.write(end_additions())
 
     # PMAP H in the include
@@ -448,7 +508,8 @@ if __name__ == "__main__":
         pmaph = pmaph.read()
     
     pmaph_replaces = [('mtx_lock(', 'mtx_lock_spin('),
-        ('mtx_unlock(', 'mtx_unlock_spin(')]
+        ('mtx_unlock(', 'mtx_unlock_spin('),
+        ]
     for old, new in pmaph_replaces:
         pmaph = pmaph.replace(old, new)
 
