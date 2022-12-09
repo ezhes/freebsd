@@ -1,7 +1,7 @@
 if __name__ == "__main__":
     import os
 
-    if os.getcwd().split('/')[-1] != 'shiny_tools':
+    if os.getcwd().split('/')[-1] != 'evg_scripts':
         print('Error, wrong cwd.')
         exit()
 
