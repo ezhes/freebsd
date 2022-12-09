@@ -1124,7 +1124,8 @@ pmap_init_asids(struct asid_set *set, int bits)
 	 * bit_alloc().
 	 */
 	set->asid_set_size = 1 << set->asid_bits;
-	set->asid_set = (bitstr_t *)smh_calloc(&pmap_heap, bitstr_size(set->asid_set_size), 1);
+	set->asid_set = (bitstr_t *)kmem_malloc(bitstr_size(set->asid_set_size),
+	    M_WAITOK | M_ZERO);
 	for (i = 0; i < ASID_FIRST_AVAILABLE; i++)
 		bit_set(set->asid_set, i);
 	set->asid_next = ASID_FIRST_AVAILABLE;
@@ -1200,7 +1201,7 @@ pmap_init_zoned(void)
 	 */
 	s = (vm_size_t)(pv_npg * sizeof(struct md_page));
 	s = round_page(s);
-	pv_table = (struct md_page *)smh_calloc(&pmap_heap, s, 1);
+	pv_table = (struct md_page *)kmem_malloc(s, M_WAITOK | M_ZERO);
 	for (i = 0; i < pv_npg; i++)
 		TAILQ_INIT(&pv_table[i].pv_list);
 	TAILQ_INIT(&pv_dummy.pv_list);
@@ -2260,7 +2261,8 @@ pmap_growkernel_zoned(vm_offset_t addr)
 		l1 = pmap_l0_to_l1(l0, kernel_vm_end);
 		if (pmap_load(l1) == 0) {
 			/* We need a new PDP entry */
-			nkpg = smh_page_alloc(&pmap_heap, 1);
+			nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT |//script_ignore
+			    VM_ALLOC_WIRED | VM_ALLOC_ZERO);
 			if (nkpg == NULL)
 				panic("pmap_growkernel: no memory to grow kernel");
 			nkpg->pindex = kernel_vm_end >> L1_SHIFT;
@@ -2280,7 +2282,8 @@ pmap_growkernel_zoned(vm_offset_t addr)
 			continue;
 		}
 
-		nkpg = smh_page_alloc(&pmap_heap, 1);
+		nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT | VM_ALLOC_WIRED |//script_ignore
+		    VM_ALLOC_ZERO);
 		if (nkpg == NULL)
 			panic("pmap_growkernel: no memory to grow kernel");
 		nkpg->pindex = kernel_vm_end >> L2_SHIFT;

@@ -399,9 +399,10 @@ if __name__ == "__main__":
             eee('get_call_arg: failed to find arg_idx', arg_idx, 'in', line)
 
         pmapc_call_replaces = [
-            ('kmem_malloc(',
-                lambda call:
-                    secure_calloc + get_call_arg(call, 0) + ', 1)'),
+            # todo: fix issue where smh_alloc tries to use un-initialized virtual memory
+            # ('kmem_malloc(',
+            #     lambda call:
+            #         secure_calloc + get_call_arg(call, 0) + ', 1)'),
             ('vmem_alloc(',
                 lambda call: '0;\n\t\t\t/*' + call + '*/\n\t\t\tpanic("pmap_map_io_transient_zoned: this should never have been called")'),
             ('vm_page_alloc_noobj(',
@@ -410,6 +411,8 @@ if __name__ == "__main__":
         lines = pmapc.split('\n')
         for idx in range(len(lines)):
             for old, get_new in pmapc_call_replaces:
+                if '//script_ignore' in lines[idx]:
+                    continue
                 line = match_multiline(lines, idx, old, [';', '{'])
                 if not line:
                     continue

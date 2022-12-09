@@ -3,6 +3,8 @@
 #include <machine/armreg.h>
 #include <machine/zone_manager_asm.h>
 
+/* * * POSSIBLY INSECURE -- this allows re-entering the zone, which may not be safe */
+
 /*
 PLAN:
 

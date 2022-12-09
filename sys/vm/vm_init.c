@@ -94,6 +94,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_map.h>
 #include <vm/vm_pager.h>
 #include <vm/vm_extern.h>
+#include <machine/zone_manager.h>
 
 extern void	uma_startup1(vm_offset_t);
 
@@ -145,6 +146,7 @@ vm_mem_init(void *dummy)
 	kmem_init_zero_region();
 	pmap_init();
 	vm_pager_init();
+	zm_smh_init();
 }
 
 void

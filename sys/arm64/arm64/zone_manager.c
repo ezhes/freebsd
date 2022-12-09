@@ -81,26 +81,29 @@ configure_watchpoints_smp(void *aux) {
     critical_exit();
 }
 
-static void
-init_startup(void *arg __unused) {
-    int i;
-    vm_offset_t pmap_zone_base = 0;
-    printf(TAG "testing early-boot zone_enter:\n");
-    zm_zone_enter(ZONE_STATE_PMAP, (void *)0x41);
-    printf(TAG "init_startup\n");
-    printf(TAG "zm_ro %p->%p\n", &__zm_ro_begin, &__zm_ro_end);
 
+void zm_smh_init(void) {
+    vm_offset_t pmap_zone_base = 0;
     pmap_zone_base = 
         kva_xalloc(WATCHPOINT_MAX_SZ_BYTES, WATCHPOINT_MAX_SZ_BYTES);
     printf(
         TAG "pmap_zone: %lx->%lx\n", 
         pmap_zone_base, pmap_zone_base + WATCHPOINT_MAX_SZ_BYTES
     );
-
     smh_init(
         &pmap_heap, "pmap_heap", 
         pmap_zone_base, WATCHPOINT_MAX_SZ_BYTES
     );
+    printf(TAG "smh initialized\n");
+}
+
+static void
+init_startup(void *arg __unused) {
+    int i;
+    // printf(TAG "testing early-boot zone_enter:\n");
+    // zm_zone_enter(ZONE_STATE_PMAP, (void *)0x41);
+    printf(TAG "init_startup\n");
+    printf(TAG "zm_ro %p->%p\n", &__zm_ro_begin, &__zm_ro_end);
 
     zm_pcpu_count = mp_ncpus;
     zm_globals = smh_calloc(&pmap_heap, sizeof(zm_globals_s), 1);
@@ -128,7 +131,7 @@ init_startup(void *arg __unused) {
     */
     smp_rendezvous(NULL, configure_watchpoints_smp, NULL, NULL);
 
-    printf("Entering pmap zone...\n");
+    // printf("Entering pmap zone...\n");
     // critical_enter();
     // u_int64_t start = 0, stop = 0;
     // __asm__ volatile(
@@ -166,7 +169,7 @@ init_startup(void *arg __unused) {
     // printf(TAG "dispatch_test_nop raw 100000 cycles = %lu\n", stop-start);
 
     // critical_exit();
-    zm_zone_enter(ZONE_STATE_PMAP, (void *)0x42);
+    // zm_zone_enter(ZONE_STATE_PMAP, (void *)0x42);
 }
 
 /* Start after SMP is up so that we can rendezvous. */

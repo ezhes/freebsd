@@ -46,4 +46,7 @@ extern zm_pcpu_s *zm_pcpus;
 extern u_int32_t zm_pcpu_count;
 extern const zm_zone_dispatch_fcn_t zm_dispatch_functions[];
 
+extern struct secure_memory_heap pmap_heap;
+void zm_smh_init(void);
+
 #endif /* _ZONE_MANAGER_H_ */

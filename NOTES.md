@@ -238,7 +238,8 @@ exception.S:269
 exception reason:
 
 ```bash
-$ESR_EL1
+p/x $ESR_EL1
+p/t $ESR_EL1 >> 26
 ```
 
 objdump
