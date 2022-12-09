@@ -12,7 +12,7 @@ qemu-system-aarch64 -m 4096M -cpu cortex-a72 -smp 4 -M virt  \
         -drive if=none,file=../qemu/test.img,id=hd0 \
         -device virtio-blk-device,drive=hd0 \
         -device virtio-net-device,netdev=net0 \
-        -netdev user,id=net0 $DEBUG_ARG
+        -netdev user,id=net0,hostfwd=tcp::10022-:22 $DEBUG_ARG
 
 QEMU_EXIT=$?
 echo "QEMU exited (status = $QEMU_EXIT)"

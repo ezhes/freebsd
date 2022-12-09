@@ -1843,7 +1843,7 @@ pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 	/*
 	 * allocate the l0 page
 	 */
-	m = smh_calloc(&pmap_heap, PAGE_SIZE, 1);
+	m = smh_page_alloc(&pmap_heap, 1);
 	pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
 	pmap->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP(pmap->pm_l0_paddr);
 
@@ -1912,7 +1912,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 	/*
 	 * Allocate a page table page.
 	 */
-	if ((m = smh_calloc(&pmap_heap, PAGE_SIZE, 1)) == NULL) {
+	if ((m = smh_page_alloc(&pmap_heap, 1)) == NULL) {
 		if (lockp != NULL) {
 			RELEASE_PV_LIST_LOCK(lockp);
 			PMAP_UNLOCK(pmap);
@@ -2260,7 +2260,7 @@ pmap_growkernel_zoned(vm_offset_t addr)
 		l1 = pmap_l0_to_l1(l0, kernel_vm_end);
 		if (pmap_load(l1) == 0) {
 			/* We need a new PDP entry */
-			nkpg = smh_calloc(&pmap_heap, PAGE_SIZE, 1);
+			nkpg = smh_page_alloc(&pmap_heap, 1);
 			if (nkpg == NULL)
 				panic("pmap_growkernel: no memory to grow kernel");
 			nkpg->pindex = kernel_vm_end >> L1_SHIFT;
@@ -2280,7 +2280,7 @@ pmap_growkernel_zoned(vm_offset_t addr)
 			continue;
 		}
 
-		nkpg = smh_calloc(&pmap_heap, PAGE_SIZE, 1);
+		nkpg = smh_page_alloc(&pmap_heap, 1);
 		if (nkpg == NULL)
 			panic("pmap_growkernel: no memory to grow kernel");
 		nkpg->pindex = kernel_vm_end >> L2_SHIFT;
@@ -2628,7 +2628,7 @@ retry:
 		}
 	}
 	/* No free items, allocate another chunk */
-	m = smh_calloc(&pmap_heap, PAGE_SIZE, 1);
+	m = smh_page_alloc(&pmap_heap, 1);
 	if (m == NULL) {
 		if (lockp == NULL) {
 			PV_STAT(pc_chunk_tryfail++);
@@ -2693,7 +2693,7 @@ retry:
 			break;
 	}
 	for (reclaimed = false; avail < needed; avail += _NPCPV) {
-		m = smh_calloc(&pmap_heap, PAGE_SIZE, 1);
+		m = smh_page_alloc(&pmap_heap, 1);
 		if (m == NULL) {
 			m = reclaim_pv_chunk(pmap, lockp);
 			if (m == NULL)
@@ -6390,7 +6390,7 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 			return (NULL);
 	}
 
-	if ((ml2 = smh_calloc(&pmap_heap, PAGE_SIZE, 1)) ==
+	if ((ml2 = smh_page_alloc(&pmap_heap, 1)) ==
 	    NULL) {
 		CTR2(KTR_PMAP, "pmap_demote_l1: failure for va %#lx"
 		    " in pmap %p", va, pmap);
@@ -6524,7 +6524,7 @@ pmap_demote_l2_locked(pmap_t pmap, pt_entry_t *l2, vm_offset_t va,
 		 * priority (VM_ALLOC_INTERRUPT).  Otherwise, the
 		 * priority is normal.
 		 */
-		ml3 = smh_calloc(&pmap_heap, PAGE_SIZE, 1);
+		ml3 = smh_page_alloc(&pmap_heap, 1);
 
 		/*
 		 * If the allocation of the new page table page fails,

@@ -314,6 +314,7 @@ if __name__ == "__main__":
 
     transfer_type = 'uint64_t'
     secure_calloc = 'smh_calloc(&pmap_heap, '
+    secure_page = 'smh_page_alloc(&pmap_heap, '
     struct = '\nstruct pmap_call {\n\tenum pmap_external_fn func;\n\t' + transfer_type + ' * args;\n};\n'
 
     
@@ -404,7 +405,7 @@ if __name__ == "__main__":
             ('vmem_alloc(',
                 lambda call: '0;\n\t\t\t/*' + call + '*/\n\t\t\tpanic("pmap_map_io_transient_zoned: this should never have been called")'),
             ('vm_page_alloc_noobj(',
-                lambda _call: secure_calloc + 'PAGE_SIZE, 1)'),
+                lambda _call: secure_page + '1)'),
             ]
         lines = pmapc.split('\n')
         for idx in range(len(lines)):
