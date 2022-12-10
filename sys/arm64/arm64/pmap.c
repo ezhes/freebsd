@@ -7471,7 +7471,7 @@ pmap_secure_vm_page(void)
 	vm_page_t m = vm_page_getfake(pmap_kextract_zoned((vm_offset_t) mempage), VM_MEMATTR_UNCACHEABLE);
 	m->flags = PG_ZERO | m->flags;
 	// m->busy_lock = VPB_UNBUSIED; // VPB_CURTHREAD_EXCLUSIVE from initfake
-	vm_wire_add(1);
+	// vm_wire_add(1); // from vm_page_alloc_noobj, but looks like stats
 	// m->a.flags = 0; // maybe? currently m->a.queue = PQ_NONE instead
 	return m;
 }
