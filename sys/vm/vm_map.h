@@ -308,7 +308,7 @@ struct vmspace {
 static __inline pmap_t
 vmspace_pmap(struct vmspace *vmspace)
 {
-	return &vmspace->vm_pmap;
+	return vmspace->vm_pmap;
 }
 #endif	/* _KERNEL */
 

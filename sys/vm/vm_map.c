@@ -322,13 +322,13 @@ vmspace_zdtor(void *mem, int size, void *arg)
  * and initialize those structures.  The refcnt is set to 1.
  */
 struct vmspace *
-vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
+vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_tt pinit)
 {
 	struct vmspace *vm;
 
 	vm = uma_zalloc(vmspace_zone, M_WAITOK);
 	KASSERT(vm->vm_map.pmap == NULL, ("vm_map.pmap must be NULL"));
-	if (!pinit(vmspace_pmap(vm))) {
+	if (!(*pinit)(vmspace_pmap(vm))) {
 		uma_zfree(vmspace_zone, vm);
 		return (NULL);
 	}
@@ -4258,7 +4258,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	old_map = &vm1->vm_map;
 	/* Copy immutable fields of vm1 to vm2. */
 	vm2 = vmspace_alloc(vm_map_min(old_map), vm_map_max(old_map),
-	    pmap_pinit);
+	    &pmap_pinit);
 	if (vm2 == NULL)
 		return (NULL);
 
