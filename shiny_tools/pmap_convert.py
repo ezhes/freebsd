@@ -304,7 +304,7 @@ if __name__ == "__main__":
         '		panic("Failed to get secure page for pmap page table.");\n'\
         '	vm_page_t m = vm_page_getfake(pmap_kextract_zoned((vm_offset_t) mempage), VM_MEMATTR_UNCACHEABLE);\n'\
         '	m->flags = PG_ZERO | m->flags;\n'\
-        '	m->busy_lock = VPB_UNBUSIED; // or VPB_CURTHREAD_EXCLUSIVE?\n'\
+        '	// m->busy_lock = VPB_UNBUSIED; // VPB_CURTHREAD_EXCLUSIVE from initfake\n'\
         '	vm_wire_add(1);\n'\
         '	// m->a.flags = 0; // maybe? currently m->a.queue = PQ_NONE instead\n'\
         '	return m;\n'\
