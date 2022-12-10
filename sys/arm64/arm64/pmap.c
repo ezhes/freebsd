@@ -7465,7 +7465,10 @@ pmap_secure_vm_page(void)
 	// replaces vm_page_alloc_noobj(int req) --> _vm_page_alloc_noobj_domain
 	// also see vm_page_initfake
 	// VM_MEMATTR_WRITE_BACK gets stuck in fs mount
-	vm_page_t m = vm_page_getfake(pmap_kextract_zoned((vm_offset_t) smh_page_alloc(&pmap_heap, 1)), VM_MEMATTR_UNCACHEABLE);
+	void *mempage = smh_page_alloc(&pmap_heap, 1);
+	if (mempage == NULL)
+		panic("Failed to get secure page for pmap page table.");
+	vm_page_t m = vm_page_getfake(pmap_kextract_zoned((vm_offset_t) mempage), VM_MEMATTR_UNCACHEABLE);
 	m->flags = PG_ZERO | m->flags;
 	m->busy_lock = VPB_UNBUSIED; // or VPB_CURTHREAD_EXCLUSIVE?
 	vm_wire_add(1);

@@ -299,7 +299,10 @@ if __name__ == "__main__":
         '	// replaces vm_page_alloc_noobj(int req) --> _vm_page_alloc_noobj_domain\n'\
         '	// also see vm_page_initfake\n'\
         '	// VM_MEMATTR_WRITE_BACK gets stuck in fs mount\n'\
-        '	vm_page_t m = vm_page_getfake(pmap_kextract_zoned((vm_offset_t) smh_page_alloc(&pmap_heap, 1)), VM_MEMATTR_UNCACHEABLE);\n'\
+        '	void *mempage = smh_page_alloc(&pmap_heap, 1);\n'\
+        '	if (mempage == NULL)\n'\
+        '		panic("Failed to get secure page for pmap page table.");\n'\
+        '	vm_page_t m = vm_page_getfake(pmap_kextract_zoned((vm_offset_t) mempage), VM_MEMATTR_UNCACHEABLE);\n'\
         '	m->flags = PG_ZERO | m->flags;\n'\
         '	m->busy_lock = VPB_UNBUSIED; // or VPB_CURTHREAD_EXCLUSIVE?\n'\
         '	vm_wire_add(1);\n'\
