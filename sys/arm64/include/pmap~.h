@@ -96,6 +96,7 @@ struct pmap {
 	int			pm_levels;
 };
 typedef struct pmap *pmap_t;
+typedef struct pmap **pmap_tt;
 
 typedef struct pv_entry {
 	vm_offset_t		pv_va;	/* virtual address for mapping */
