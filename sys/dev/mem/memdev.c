@@ -108,7 +108,7 @@ memioctl(struct cdev *dev, u_long cmd, caddr_t data, int flags,
 		vm_map_lock_read(map);
 		if (vm_map_lookup_entry(map, me->me_vaddr, &entry)) {
 			me->me_paddr = pmap_extract(
-			    &td->td_proc->p_vmspace->vm_pmap, me->me_vaddr);
+			    td->td_proc->p_vmspace->vm_pmap, me->me_vaddr);
 			if (me->me_paddr != 0) {
 				me->me_state = ME_STATE_MAPPED;
 				me->me_domain = vm_phys_domain(me->me_paddr);

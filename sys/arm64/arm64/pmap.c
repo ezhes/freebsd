@@ -395,7 +395,7 @@ vm_paddr_t pmap_kextract_zoned(vm_offset_t va);
 void pmap_kremove_zoned(vm_offset_t va);
 void pmap_kremove_device_zoned(vm_offset_t sva, vm_size_t size);
 bool pmap_page_is_mapped_zoned(vm_page_t m);
-int pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels);
+int pmap_pinit_stage_zoned(pmap_t * pmap, enum pmap_stage stage, int levels);
 bool pmap_ps_enabled_zoned(pmap_t pmap __unused);
 uint64_t pmap_to_ttbr0_zoned(pmap_t pmap);
 void * pmap_mapbios_zoned(vm_paddr_t pa, vm_size_t size);
@@ -432,7 +432,7 @@ void pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t object
 boolean_t pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m);
 void pmap_page_init_zoned(vm_page_t m);
 int pmap_page_wired_mappings_zoned(vm_page_t m);
-int pmap_pinit_zoned(pmap_t pmap);
+int pmap_pinit_zoned(pmap_t * pmap);
 void pmap_pinit0_zoned(pmap_t pmap);
 void pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot);
 void pmap_qenter_zoned(vm_offset_t sva, vm_page_t * ma, int count);
@@ -1837,30 +1837,34 @@ pmap_pinit0_zoned(pmap_t pmap)
 }
 
 int
-pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
+pmap_pinit_stage_zoned(pmap_t *pmap, enum pmap_stage stage, int levels) 
 {
+	*pmap = smh_malloc(&pmap_heap, sizeof(struct pmap)); 
+
 	vm_page_t m;
 
 	/*
 	 * allocate the l0 page
 	 */
-	m = smh_page_alloc(&pmap_heap, 1);
-	pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
-	pmap->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP(pmap->pm_l0_paddr);
+	m = vm_page_alloc_noobj(VM_ALLOC_WAITOK | VM_ALLOC_WIRED |
+	    VM_ALLOC_ZERO);    
+ 
+	(*pmap)->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
+	(*pmap)->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP((*pmap)->pm_l0_paddr); 
 
-	vm_radix_init(&pmap->pm_root);
-	bzero(&pmap->pm_stats, sizeof(pmap->pm_stats));
-	pmap->pm_cookie = COOKIE_FROM(-1, INT_MAX);
+	vm_radix_init(&((*pmap)->pm_root));
+	bzero(&((*pmap)->pm_stats), sizeof((*pmap)->pm_stats));
+	(*pmap)->pm_cookie = COOKIE_FROM(-1, INT_MAX);
 
 	MPASS(levels == 3 || levels == 4);
-	pmap->pm_levels = levels;
-	pmap->pm_stage = stage;
+	(*pmap)->pm_levels = levels;
+	(*pmap)->pm_stage = stage;
 	switch (stage) {
 	case PM_STAGE1:
-		pmap->pm_asid_set = &asids;
+		(*pmap)->pm_asid_set = &asids;
 		break;
 	case PM_STAGE2:
-		pmap->pm_asid_set = &vmids;
+		(*pmap)->pm_asid_set = &vmids;
 		break;
 	default:
 		panic("%s: Invalid pmap type %d", __func__, stage);
@@ -1868,25 +1872,25 @@ pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 	}
 
 	/* XXX Temporarily disable deferred ASID allocation. */
-	pmap_alloc_asid(pmap);
+	pmap_alloc_asid(*pmap);
 
 	/*
 	 * Allocate the level 1 entry to use as the root. This will increase
 	 * the refcount on the level 1 page so it won't be removed until
 	 * pmap_release_zoned() is called.
 	 */
-	if (pmap->pm_levels == 3) {
-		PMAP_LOCK(pmap);
-		m = _pmap_alloc_l3(pmap, NUL2E + NUL1E, NULL);
-		PMAP_UNLOCK(pmap);
+	if ((*pmap)->pm_levels == 3) {
+		PMAP_LOCK(*pmap);
+		m = _pmap_alloc_l3(*pmap, NUL2E + NUL1E, NULL);
+		PMAP_UNLOCK(*pmap);
 	}
-	pmap->pm_ttbr = VM_PAGE_TO_PHYS(m);
+	(*pmap)->pm_ttbr = VM_PAGE_TO_PHYS(m);
 
 	return (1);
 }
 
 int
-pmap_pinit_zoned(pmap_t pmap)
+pmap_pinit_zoned(pmap_t *pmap)
 {
 
 	return (pmap_pinit_stage_zoned(pmap, PM_STAGE1, 4));
@@ -1913,7 +1917,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 	/*
 	 * Allocate a page table page.
 	 */
-	if ((m = smh_page_alloc(&pmap_heap, 1)) == NULL) {
+	if ((m = vm_page_alloc_noobj(VM_ALLOC_WIRED | VM_ALLOC_ZERO)) == NULL) {
 		if (lockp != NULL) {
 			RELEASE_PV_LIST_LOCK(lockp);
 			PMAP_UNLOCK(pmap);
@@ -2631,7 +2635,7 @@ retry:
 		}
 	}
 	/* No free items, allocate another chunk */
-	m = smh_page_alloc(&pmap_heap, 1);
+	m = vm_page_alloc_noobj(VM_ALLOC_WIRED);
 	if (m == NULL) {
 		if (lockp == NULL) {
 			PV_STAT(pc_chunk_tryfail++);
@@ -2696,7 +2700,7 @@ retry:
 			break;
 	}
 	for (reclaimed = false; avail < needed; avail += _NPCPV) {
-		m = smh_page_alloc(&pmap_heap, 1);
+		m = vm_page_alloc_noobj(VM_ALLOC_WIRED);
 		if (m == NULL) {
 			m = reclaim_pv_chunk(pmap, lockp);
 			if (m == NULL)
@@ -6393,7 +6397,7 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 			return (NULL);
 	}
 
-	if ((ml2 = smh_page_alloc(&pmap_heap, 1)) ==
+	if ((ml2 = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT | VM_ALLOC_WIRED)) ==
 	    NULL) {
 		CTR2(KTR_PMAP, "pmap_demote_l1: failure for va %#lx"
 		    " in pmap %p", va, pmap);
@@ -6527,7 +6531,9 @@ pmap_demote_l2_locked(pmap_t pmap, pt_entry_t *l2, vm_offset_t va,
 		 * priority (VM_ALLOC_INTERRUPT).  Otherwise, the
 		 * priority is normal.
 		 */
-		ml3 = smh_page_alloc(&pmap_heap, 1);
+		ml3 = vm_page_alloc_noobj(
+		    (VIRT_IN_DMAP(va) ? VM_ALLOC_INTERRUPT : 0) |
+		    VM_ALLOC_WIRED);
 
 		/*
 		 * If the allocation of the new page table page fails,
@@ -7570,7 +7576,7 @@ pmap_dispatch(void* call_uncasted)
 		case pmap_page_is_mapped_enum:
 			return (uint64_t) pmap_page_is_mapped_zoned((vm_page_t) call->args[0]);
 		case pmap_pinit_stage_enum:
-			return (uint64_t) pmap_pinit_stage_zoned((pmap_t) call->args[0], (enum pmap_stage) call->args[1], (int) call->args[2]);
+			return (uint64_t) pmap_pinit_stage_zoned((pmap_t *) call->args[0], (enum pmap_stage) call->args[1], (int) call->args[2]);
 		case pmap_ps_enabled_enum:
 			return (uint64_t) pmap_ps_enabled_zoned((pmap_t) call->args[0]);
 		case pmap_to_ttbr0_enum:
@@ -7660,7 +7666,7 @@ pmap_dispatch(void* call_uncasted)
 		case pmap_page_wired_mappings_enum:
 			return (uint64_t) pmap_page_wired_mappings_zoned((vm_page_t) call->args[0]);
 		case pmap_pinit_enum:
-			return (uint64_t) pmap_pinit_zoned((pmap_t) call->args[0]);
+			return (uint64_t) pmap_pinit_zoned((pmap_t *) call->args[0]);
 		case pmap_pinit0_enum:
 			pmap_pinit0_zoned((pmap_t) call->args[0]);
 			return 0;
@@ -7807,7 +7813,7 @@ pmap_page_is_mapped(vm_page_t m)
 }
 
 int
-pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
+pmap_pinit_stage(pmap_t * pmap, enum pmap_stage stage, int levels)
 {
 	uint64_t args[] = {(uint64_t) pmap, (uint64_t) stage, (uint64_t) levels};
 	struct pmap_call call = {pmap_pinit_stage_enum, args};
@@ -8103,7 +8109,7 @@ pmap_page_wired_mappings(vm_page_t m)
 }
 
 int
-pmap_pinit(pmap_t pmap)
+pmap_pinit(pmap_t * pmap)
 {
 	uint64_t args[] = {(uint64_t) pmap};
 	struct pmap_call call = {pmap_pinit_enum, args};

@@ -313,6 +313,14 @@ vmspace_pmap(struct vmspace *vmspace)
 #endif	/* _KERNEL */
 
 #ifdef	_KERNEL
+static __inline pmap_tt
+vmspace_pmap_t(struct vmspace *vmspace)
+{
+	return &vmspace->vm_pmap;
+}
+#endif	/* _KERNEL */
+
+#ifdef	_KERNEL
 /*
  *	Macros:		vm_map_lock, etc.
  *	Function:
