@@ -144,9 +144,10 @@ vm_mem_init(void *dummy)
 	kmem_init(virtual_avail, virtual_end);
 
 	kmem_init_zero_region();
+	// zm_smh_init(); // here seems unstable
 	pmap_init();
 	vm_pager_init();
-	zm_smh_init();
+	zm_smh_init(); // here seems stable
 }
 
 void

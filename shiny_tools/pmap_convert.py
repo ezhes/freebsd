@@ -291,6 +291,22 @@ if __name__ == "__main__":
     # construct the code
     preface = '\n/*\n * unzoned calls into priveleged instructions\n */\n\n'
 
+    secure_page_alloc_call = 'pmap_secure_vm_page()'
+    secure_page_alloc_declaration = 'static vm_page_t ' + secure_page_alloc_call[:-2] + '(void);\n'
+    secure_page_alloc_fn = ' '.join(secure_page_alloc_declaration.split(' ')[:2]) + '\n'\
+        + secure_page_alloc_declaration.split(' ')[2][:-2] + '\n'\
+        '{\n'\
+        '	// replaces vm_page_alloc_noobj(int req) --> _vm_page_alloc_noobj_domain\n'\
+        '	// also see vm_page_initfake\n'\
+        '	// VM_MEMATTR_WRITE_BACK gets stuck in fs mount\n'\
+        '	vm_page_t m = vm_page_getfake(pmap_kextract_zoned((vm_offset_t) smh_page_alloc(&pmap_heap, 1)), VM_MEMATTR_UNCACHEABLE);\n'\
+        '	m->flags = PG_ZERO | m->flags;\n'\
+        '	m->busy_lock = VPB_UNBUSIED; // or VPB_CURTHREAD_EXCLUSIVE?\n'\
+        '	vm_wire_add(1);\n'\
+        '	// m->a.flags = 0; // maybe? currently m->a.queue = PQ_NONE instead\n'\
+        '	return m;\n'\
+        '}\n'
+
     def zoned_name(func: Func):
         return func.name + '_zoned'
 
@@ -302,7 +318,7 @@ if __name__ == "__main__":
     new_declarations = ''
     def new_declaration_of(func: Func):
         declr = func.build_call_like(name_transform=zoned_name)
-        return func.rettype + ' ' + declr + ';\n'
+        return 'static ' + func.rettype + ' ' + declr + ';\n'
 
     enum = '\nenum pmap_external_fn {'
     def enum_name(func: Func):
@@ -354,16 +370,23 @@ if __name__ == "__main__":
         return '\n// because defn not in pmap.c, skipped ' + ' '.join(skip.split())
 
     def end_additions():
-        return preface + enum + enum_tail + struct + dispatch + dispatch_tail + public_fns + skipped_cmt
+        return preface + secure_page_alloc_fn + enum + enum_tail + struct + dispatch + dispatch_tail + public_fns + skipped_cmt
 
     pmapc = ''.join(lines)
     for func in funcs:
+        func: Func = func
         enum += enum_line(func)
         dispatch += dispatch_line(func)
         public_fns += public_fn(func)
         new_declarations += new_declaration_of(func)
+        pmapc = pmapc.replace(func.rettype + '\n' + func.search_def, 'static ' + func.rettype + '\n' + func.search_def)
         pmapc = pmapc.replace(func.name + '(', zoned_name(func) + '(')
-    
+    new_declarations = secure_page_alloc_declaration + new_declarations
+    # hardcode fixes
+    pmapc = pmapc.replace('PMAP_INLINE static', 'static inline')
+    new_declarations = new_declarations.replace('static void pmap_kremove_zoned', 'static inline void pmap_kremove_zoned')
+    public_fns = public_fns.replace('void\npmap_kremove(', 'PMAP_INLINE void\npmap_kremove(')
+
     for skip in skip_decls:
         skipped_cmt += skipped_cmt_of(skip)
     skipped_cmt += '\n'
@@ -399,19 +422,20 @@ if __name__ == "__main__":
             eee('get_call_arg: failed to find arg_idx', arg_idx, 'in', line)
 
         pmapc_call_replaces = [
-            # todo: fix issue where smh_alloc tries to use un-initialized virtual memory
+            # NOTE: kmem_malloc replacement requires smh_init to be before pmap_init
             # ('kmem_malloc(',
             #     lambda call:
             #         secure_calloc + get_call_arg(call, 0) + ', 1)'),
             ('vmem_alloc(',
                 lambda call: '0;\n\t\t\t/*' + call + '*/\n\t\t\tpanic("pmap_map_io_transient_zoned: this should never have been called")'),
+            # NOTE: pmap_grow_kernel_zoned is bypassed because kmem_init causes pmap_grow_kernel_zoned and smh_init can't work before kmem_init
             ('vm_page_alloc_noobj(',
-                lambda _call: secure_page + '1)'),
+                lambda _call: secure_page_alloc_call),
             ]
         lines = pmapc.split('\n')
         for idx in range(len(lines)):
             for old, get_new in pmapc_call_replaces:
-                if '//script_ignore' in lines[idx]:
+                if '// in growkernel' in lines[idx]:
                     continue
                 line = match_multiline(lines, idx, old, [';', '{'])
                 if not line:

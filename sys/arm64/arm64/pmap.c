@@ -383,72 +383,73 @@ SYSCTL_INT(_vm_pmap, OID_AUTO, superpages_enabled,
 #define	PMAP_ENTER_NORECLAIM	0x1000000	/* Don't reclaim PV entries. */
 #define	PMAP_ENTER_NOREPLACE	0x2000000	/* Don't replace mappings. */
 
-void pmap_page_set_memattr_zoned(vm_page_t m, vm_memattr_t ma);
-void pmap_activate_vm_zoned(pmap_t pmap);
-void pmap_bootstrap_zoned(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart, vm_size_t kernlen);
-int pmap_change_attr_zoned(vm_offset_t va, vm_size_t size, int mode);
-int pmap_change_prot_zoned(vm_offset_t va, vm_size_t size, vm_prot_t prot);
-void pmap_kenter_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode);
-void pmap_kenter_device_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa);
-bool pmap_klookup_zoned(vm_offset_t va, vm_paddr_t * pa);
-vm_paddr_t pmap_kextract_zoned(vm_offset_t va);
-void pmap_kremove_zoned(vm_offset_t va);
-void pmap_kremove_device_zoned(vm_offset_t sva, vm_size_t size);
-bool pmap_page_is_mapped_zoned(vm_page_t m);
-int pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels);
-bool pmap_ps_enabled_zoned(pmap_t pmap __unused);
-uint64_t pmap_to_ttbr0_zoned(pmap_t pmap);
-void * pmap_mapbios_zoned(vm_paddr_t pa, vm_size_t size);
-void pmap_unmapbios_zoned(vm_offset_t va, vm_size_t size);
-boolean_t pmap_map_io_transient_zoned(vm_page_t * page, vm_offset_t * vaddr, int count, boolean_t can_fault);
-void pmap_unmap_io_transient_zoned(vm_page_t * page, vm_offset_t * vaddr, int count, boolean_t can_fault);
-bool pmap_get_tables_zoned(pmap_t pmap, vm_offset_t va, pd_entry_t ** l0, pd_entry_t ** l1, pd_entry_t ** l2, pt_entry_t ** l3);
-int pmap_fault_zoned(pmap_t pmap, uint64_t esr, uint64_t far);
-int pmap_senter_zoned(pmap_t pmap, vm_offset_t va, vm_paddr_t pa, vm_prot_t prot, u_int flags);
-int pmap_sremove_zoned(pmap_t pmap, vm_offset_t va);
-void pmap_sremove_pages_zoned(pmap_t pmap);
-struct pcb * pmap_switch_zoned(struct thread * old __unused, struct thread * new);
-void pmap_activate_zoned(struct thread * td);
-void pmap_advise_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, int advice);
-void pmap_align_superpage_zoned(vm_object_t object, vm_ooffset_t offset, vm_offset_t * addr, vm_size_t size);
-void pmap_clear_modify_zoned(vm_page_t m);
-void pmap_copy_zoned(pmap_t dst_pmap, pmap_t src_pmap, vm_offset_t dst_addr, vm_size_t len, vm_offset_t src_addr);
-void pmap_copy_page_zoned(vm_page_t msrc, vm_page_t mdst);
-void pmap_copy_pages_zoned(vm_page_t * ma, vm_offset_t a_offset, vm_page_t * mb, vm_offset_t b_offset, int xfersize);
-int pmap_enter_zoned(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot, u_int flags, int8_t psind);
-void pmap_enter_object_zoned(pmap_t pmap, vm_offset_t start, vm_offset_t end, vm_page_t m_start, vm_prot_t prot);
-void pmap_enter_quick_zoned(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot);
-vm_paddr_t pmap_extract_zoned(pmap_t pmap, vm_offset_t va);
-vm_page_t pmap_extract_and_hold_zoned(pmap_t pmap, vm_offset_t va, vm_prot_t prot);
-void pmap_growkernel_zoned(vm_offset_t addr);
-void pmap_init_zoned(void);
-boolean_t pmap_is_modified_zoned(vm_page_t m);
-boolean_t pmap_is_prefaultable_zoned(pmap_t pmap, vm_offset_t addr);
-boolean_t pmap_is_referenced_zoned(vm_page_t m);
-boolean_t pmap_is_valid_memattr_zoned(pmap_t pmap __unused, vm_memattr_t mode);
-vm_offset_t pmap_map_zoned(vm_offset_t * virt, vm_paddr_t start, vm_paddr_t end, int prot);
-int pmap_mincore_zoned(pmap_t pmap, vm_offset_t addr, vm_paddr_t * pap);
-void pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t object, vm_pindex_t pindex, vm_size_t size);
-boolean_t pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m);
-void pmap_page_init_zoned(vm_page_t m);
-int pmap_page_wired_mappings_zoned(vm_page_t m);
-int pmap_pinit_zoned(pmap_t pmap);
-void pmap_pinit0_zoned(pmap_t pmap);
-void pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot);
-void pmap_qenter_zoned(vm_offset_t sva, vm_page_t * ma, int count);
-void pmap_qremove_zoned(vm_offset_t sva, int count);
-vm_offset_t pmap_quick_enter_page_zoned(vm_page_t m);
-void pmap_quick_remove_page_zoned(vm_offset_t addr);
-void pmap_release_zoned(pmap_t pmap);
-void pmap_remove_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva);
-void pmap_remove_all_zoned(vm_page_t m);
-void pmap_remove_pages_zoned(pmap_t pmap);
-void pmap_remove_write_zoned(vm_page_t m);
-void pmap_sync_icache_zoned(pmap_t pmap, vm_offset_t va, vm_size_t sz);
-int pmap_ts_referenced_zoned(vm_page_t m);
-void pmap_unwire_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva);
-void pmap_zero_page_zoned(vm_page_t m);
-void pmap_zero_page_area_zoned(vm_page_t m, int off, int size);
+static vm_page_t pmap_secure_vm_page(void);
+static void pmap_page_set_memattr_zoned(vm_page_t m, vm_memattr_t ma);
+static void pmap_activate_vm_zoned(pmap_t pmap);
+static void pmap_bootstrap_zoned(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart, vm_size_t kernlen);
+static int pmap_change_attr_zoned(vm_offset_t va, vm_size_t size, int mode);
+static int pmap_change_prot_zoned(vm_offset_t va, vm_size_t size, vm_prot_t prot);
+static void pmap_kenter_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode);
+static void pmap_kenter_device_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa);
+static bool pmap_klookup_zoned(vm_offset_t va, vm_paddr_t * pa);
+static vm_paddr_t pmap_kextract_zoned(vm_offset_t va);
+static inline void pmap_kremove_zoned(vm_offset_t va);
+static void pmap_kremove_device_zoned(vm_offset_t sva, vm_size_t size);
+static bool pmap_page_is_mapped_zoned(vm_page_t m);
+static int pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels);
+static bool pmap_ps_enabled_zoned(pmap_t pmap __unused);
+static uint64_t pmap_to_ttbr0_zoned(pmap_t pmap);
+static void * pmap_mapbios_zoned(vm_paddr_t pa, vm_size_t size);
+static void pmap_unmapbios_zoned(vm_offset_t va, vm_size_t size);
+static boolean_t pmap_map_io_transient_zoned(vm_page_t * page, vm_offset_t * vaddr, int count, boolean_t can_fault);
+static void pmap_unmap_io_transient_zoned(vm_page_t * page, vm_offset_t * vaddr, int count, boolean_t can_fault);
+static bool pmap_get_tables_zoned(pmap_t pmap, vm_offset_t va, pd_entry_t ** l0, pd_entry_t ** l1, pd_entry_t ** l2, pt_entry_t ** l3);
+static int pmap_fault_zoned(pmap_t pmap, uint64_t esr, uint64_t far);
+static int pmap_senter_zoned(pmap_t pmap, vm_offset_t va, vm_paddr_t pa, vm_prot_t prot, u_int flags);
+static int pmap_sremove_zoned(pmap_t pmap, vm_offset_t va);
+static void pmap_sremove_pages_zoned(pmap_t pmap);
+static struct pcb * pmap_switch_zoned(struct thread * old __unused, struct thread * new);
+static void pmap_activate_zoned(struct thread * td);
+static void pmap_advise_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, int advice);
+static void pmap_align_superpage_zoned(vm_object_t object, vm_ooffset_t offset, vm_offset_t * addr, vm_size_t size);
+static void pmap_clear_modify_zoned(vm_page_t m);
+static void pmap_copy_zoned(pmap_t dst_pmap, pmap_t src_pmap, vm_offset_t dst_addr, vm_size_t len, vm_offset_t src_addr);
+static void pmap_copy_page_zoned(vm_page_t msrc, vm_page_t mdst);
+static void pmap_copy_pages_zoned(vm_page_t * ma, vm_offset_t a_offset, vm_page_t * mb, vm_offset_t b_offset, int xfersize);
+static int pmap_enter_zoned(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot, u_int flags, int8_t psind);
+static void pmap_enter_object_zoned(pmap_t pmap, vm_offset_t start, vm_offset_t end, vm_page_t m_start, vm_prot_t prot);
+static void pmap_enter_quick_zoned(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot);
+static vm_paddr_t pmap_extract_zoned(pmap_t pmap, vm_offset_t va);
+static vm_page_t pmap_extract_and_hold_zoned(pmap_t pmap, vm_offset_t va, vm_prot_t prot);
+static void pmap_growkernel_zoned(vm_offset_t addr);
+static void pmap_init_zoned(void);
+static boolean_t pmap_is_modified_zoned(vm_page_t m);
+static boolean_t pmap_is_prefaultable_zoned(pmap_t pmap, vm_offset_t addr);
+static boolean_t pmap_is_referenced_zoned(vm_page_t m);
+static boolean_t pmap_is_valid_memattr_zoned(pmap_t pmap __unused, vm_memattr_t mode);
+static vm_offset_t pmap_map_zoned(vm_offset_t * virt, vm_paddr_t start, vm_paddr_t end, int prot);
+static int pmap_mincore_zoned(pmap_t pmap, vm_offset_t addr, vm_paddr_t * pap);
+static void pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t object, vm_pindex_t pindex, vm_size_t size);
+static boolean_t pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m);
+static void pmap_page_init_zoned(vm_page_t m);
+static int pmap_page_wired_mappings_zoned(vm_page_t m);
+static int pmap_pinit_zoned(pmap_t pmap);
+static void pmap_pinit0_zoned(pmap_t pmap);
+static void pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot);
+static void pmap_qenter_zoned(vm_offset_t sva, vm_page_t * ma, int count);
+static void pmap_qremove_zoned(vm_offset_t sva, int count);
+static vm_offset_t pmap_quick_enter_page_zoned(vm_page_t m);
+static void pmap_quick_remove_page_zoned(vm_offset_t addr);
+static void pmap_release_zoned(pmap_t pmap);
+static void pmap_remove_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva);
+static void pmap_remove_all_zoned(vm_page_t m);
+static void pmap_remove_pages_zoned(pmap_t pmap);
+static void pmap_remove_write_zoned(vm_page_t m);
+static void pmap_sync_icache_zoned(pmap_t pmap, vm_offset_t va, vm_size_t sz);
+static int pmap_ts_referenced_zoned(vm_page_t m);
+static void pmap_unwire_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva);
+static void pmap_zero_page_zoned(vm_page_t m);
+static void pmap_zero_page_area_zoned(vm_page_t m, int off, int size);
 static void	free_pv_chunk(struct pv_chunk *pc);
 static void	free_pv_entry(pmap_t pmap, pv_entry_t pv);
 static pv_entry_t get_pv_entry(pmap_t pmap, struct rwlock **lockp);
@@ -674,14 +675,14 @@ pmap_pte(pmap_t pmap, vm_offset_t va, int *level)
 	return (l3);
 }
 
-bool
+static bool
 pmap_ps_enabled_zoned(pmap_t pmap __unused)
 {
 
 	return (superpages_enabled != 0);
 }
 
-bool
+static bool
 pmap_get_tables_zoned(pmap_t pmap, vm_offset_t va, pd_entry_t **l0, pd_entry_t **l1,
     pd_entry_t **l2, pt_entry_t **l3)
 {
@@ -1006,7 +1007,7 @@ pmap_bootstrap_l3(vm_offset_t l1pt, vm_offset_t va, vm_offset_t l3_start)
 /*
  *	Bootstrap the system enough to run with virtual memory.
  */
-void
+static void
 pmap_bootstrap_zoned(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
     vm_size_t kernlen)
 {
@@ -1104,7 +1105,7 @@ pmap_bootstrap_zoned(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
 /*
  *	Initialize a vm_page's machine-dependent fields.
  */
-void
+static void
 pmap_page_init_zoned(vm_page_t m)
 {
 
@@ -1137,7 +1138,7 @@ pmap_init_asids(struct asid_set *set, int bits)
  *	Called by vm_init, to initialize any structures that the pmap
  *	system needs to map virtual memory.
  */
-void
+static void
 pmap_init_zoned(void)
 {
 	struct vm_phys_seg *seg, *next_seg;
@@ -1323,7 +1324,7 @@ pmap_invalidate_all(pmap_t pmap)
  *		Extract the physical page address associated
  *		with the given map/virtual_address pair.
  */
-vm_paddr_t
+static vm_paddr_t
 pmap_extract_zoned(pmap_t pmap, vm_offset_t va)
 {
 	pt_entry_t *pte, tpte;
@@ -1372,7 +1373,7 @@ pmap_extract_zoned(pmap_t pmap, vm_offset_t va)
  *		with the given pmap and virtual address pair
  *		if that mapping permits the given protection.
  */
-vm_page_t
+static vm_page_t
 pmap_extract_and_hold_zoned(pmap_t pmap, vm_offset_t va, vm_prot_t prot)
 {
 	pt_entry_t *pte, tpte;
@@ -1432,7 +1433,7 @@ pmap_extract_and_hold_zoned(pmap_t pmap, vm_offset_t va, vm_prot_t prot)
  * physical address. Returns true if the kva is valid and stores the
  * physical address in pa if it is not NULL.
  */
-bool
+static bool
 pmap_klookup_zoned(vm_offset_t va, vm_paddr_t *pa)
 {
 	pt_entry_t *pte, tpte;
@@ -1496,7 +1497,7 @@ pmap_klookup_zoned(vm_offset_t va, vm_paddr_t *pa)
 	return (true);
 }
 
-vm_paddr_t
+static vm_paddr_t
 pmap_kextract_zoned(vm_offset_t va)
 {
 	vm_paddr_t pa;
@@ -1513,7 +1514,7 @@ pmap_kextract_zoned(vm_offset_t va)
  * Low level mapping routines.....
  ***************************************************/
 
-void
+static void
 pmap_kenter_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode)
 {
 	pd_entry_t *pde;
@@ -1547,7 +1548,7 @@ pmap_kenter_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode)
 	pmap_invalidate_range(kernel_pmap, sva, va);
 }
 
-void
+static void
 pmap_kenter_device_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa)
 {
 
@@ -1557,7 +1558,7 @@ pmap_kenter_device_zoned(vm_offset_t sva, vm_size_t size, vm_paddr_t pa)
 /*
  * Remove a page from the kernel pagetables.
  */
-PMAP_INLINE void
+static inline void
 pmap_kremove_zoned(vm_offset_t va)
 {
 	pt_entry_t *pte;
@@ -1571,7 +1572,7 @@ pmap_kremove_zoned(vm_offset_t va)
 	pmap_invalidate_page(kernel_pmap, va);
 }
 
-void
+static void
 pmap_kremove_device_zoned(vm_offset_t sva, vm_size_t size)
 {
 	pt_entry_t *pte;
@@ -1609,7 +1610,7 @@ pmap_kremove_device_zoned(vm_offset_t sva, vm_size_t size)
  *	update '*virt' with the first usable address after the mapped
  *	region.
  */
-vm_offset_t
+static vm_offset_t
 pmap_map_zoned(vm_offset_t *virt, vm_paddr_t start, vm_paddr_t end, int prot)
 {
 	return PHYS_TO_DMAP(start);
@@ -1624,7 +1625,7 @@ pmap_map_zoned(vm_offset_t *virt, vm_paddr_t start, vm_paddr_t end, int prot)
  * over.  The page *must* be wired.
  * Note: SMP coherent.  Uses a ranged shootdown IPI.
  */
-void
+static void
 pmap_qenter_zoned(vm_offset_t sva, vm_page_t *ma, int count)
 {
 	pd_entry_t *pde;
@@ -1657,7 +1658,7 @@ pmap_qenter_zoned(vm_offset_t sva, vm_page_t *ma, int count)
  * This routine tears out page mappings from the
  * kernel -- it is meant only for temporary mappings.
  */
-void
+static void
 pmap_qremove_zoned(vm_offset_t sva, int count)
 {
 	pt_entry_t *pte;
@@ -1818,7 +1819,7 @@ pmap_abort_ptp(pmap_t pmap, vm_offset_t va, vm_page_t mpte)
 	}
 }
 
-void
+static void
 pmap_pinit0_zoned(pmap_t pmap)
 {
 
@@ -1836,7 +1837,7 @@ pmap_pinit0_zoned(pmap_t pmap)
 	PCPU_SET(curpmap, pmap);
 }
 
-int
+static int
 pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 {
 	vm_page_t m;
@@ -1844,7 +1845,7 @@ pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 	/*
 	 * allocate the l0 page
 	 */
-	m = smh_page_alloc(&pmap_heap, 1);
+	m = pmap_secure_vm_page();
 	pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
 	pmap->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP(pmap->pm_l0_paddr);
 
@@ -1885,7 +1886,7 @@ pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 	return (1);
 }
 
-int
+static int
 pmap_pinit_zoned(pmap_t pmap)
 {
 
@@ -1913,7 +1914,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 	/*
 	 * Allocate a page table page.
 	 */
-	if ((m = smh_page_alloc(&pmap_heap, 1)) == NULL) {
+	if ((m = pmap_secure_vm_page()) == NULL) {
 		if (lockp != NULL) {
 			RELEASE_PV_LIST_LOCK(lockp);
 			PMAP_UNLOCK(pmap);
@@ -2158,7 +2159,7 @@ retry:
  * Called when a pmap initialized by pmap_pinit is being released.
  * Should only be called if the map contains no valid mappings.
  */
-void
+static void
 pmap_release_zoned(pmap_t pmap)
 {
 	boolean_t rv;
@@ -2241,7 +2242,7 @@ SYSCTL_PROC(_vm, OID_AUTO, kvm_free, CTLTYPE_LONG | CTLFLAG_RD | CTLFLAG_MPSAFE,
 /*
  * grow the number of kernel page table entries, if needed
  */
-void
+static void
 pmap_growkernel_zoned(vm_offset_t addr)
 {
 	vm_paddr_t paddr;
@@ -2261,7 +2262,7 @@ pmap_growkernel_zoned(vm_offset_t addr)
 		l1 = pmap_l0_to_l1(l0, kernel_vm_end);
 		if (pmap_load(l1) == 0) {
 			/* We need a new PDP entry */
-			nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT |//script_ignore
+			nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT |// in growkernel
 			    VM_ALLOC_WIRED | VM_ALLOC_ZERO);
 			if (nkpg == NULL)
 				panic("pmap_growkernel: no memory to grow kernel");
@@ -2282,7 +2283,7 @@ pmap_growkernel_zoned(vm_offset_t addr)
 			continue;
 		}
 
-		nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT | VM_ALLOC_WIRED |//script_ignore
+		nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT | VM_ALLOC_WIRED |// in growkernel
 		    VM_ALLOC_ZERO);
 		if (nkpg == NULL)
 			panic("pmap_growkernel: no memory to grow kernel");
@@ -2631,7 +2632,7 @@ retry:
 		}
 	}
 	/* No free items, allocate another chunk */
-	m = smh_page_alloc(&pmap_heap, 1);
+	m = pmap_secure_vm_page();
 	if (m == NULL) {
 		if (lockp == NULL) {
 			PV_STAT(pc_chunk_tryfail++);
@@ -2696,7 +2697,7 @@ retry:
 			break;
 	}
 	for (reclaimed = false; avail < needed; avail += _NPCPV) {
-		m = smh_page_alloc(&pmap_heap, 1);
+		m = pmap_secure_vm_page();
 		if (m == NULL) {
 			m = reclaim_pv_chunk(pmap, lockp);
 			if (m == NULL)
@@ -3099,7 +3100,7 @@ pmap_remove_l3_range(pmap_t pmap, pd_entry_t l2e, vm_offset_t sva,
  *	It is assumed that the start and end are properly
  *	rounded to the page size.
  */
-void
+static void
 pmap_remove_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 {
 	struct rwlock *lock;
@@ -3211,7 +3212,7 @@ pmap_remove_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
  *		pmap_remove (slow...)
  */
 
-void
+static void
 pmap_remove_all_zoned(vm_page_t m)
 {
 	struct md_page *pvh;
@@ -3352,7 +3353,7 @@ pmap_protect_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t sva, pt_entry_t mask,
  *	Set the physical protection on the
  *	specified range of this map as requested.
  */
-void
+static void
 pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot)
 {
 	vm_offset_t va, va_next;
@@ -3771,7 +3772,7 @@ restart:
 /*
  * Add a single SMMU entry. This function does not sleep.
  */
-int
+static int
 pmap_senter_zoned(pmap_t pmap, vm_offset_t va, vm_paddr_t pa,
     vm_prot_t prot, u_int flags)
 {
@@ -3834,7 +3835,7 @@ out:
 /*
  * Remove a single SMMU entry.
  */
-int
+static int
 pmap_sremove_zoned(pmap_t pmap, vm_offset_t va)
 {
 	pt_entry_t *pte;
@@ -3864,7 +3865,7 @@ pmap_sremove_zoned(pmap_t pmap, vm_offset_t va)
  * All the L3 entires must be cleared in advance, otherwise
  * this function panics.
  */
-void
+static void
 pmap_sremove_pages_zoned(pmap_t pmap)
 {
 	pd_entry_t l0e, *l1, l1e, *l2, l2e;
@@ -3958,7 +3959,7 @@ pmap_sremove_pages_zoned(pmap_t pmap)
  *	or lose information.  That is, this routine must actually
  *	insert this page into the given map NOW.
  */
-int
+static int
 pmap_enter_zoned(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
     u_int flags, int8_t psind)
 {
@@ -4471,7 +4472,7 @@ pmap_enter_l2(pmap_t pmap, vm_offset_t va, pd_entry_t new_l2, u_int flags,
  * is mapped; only those for which a resident page exists with the
  * corresponding offset from m_start are mapped.
  */
-void
+static void
 pmap_enter_object_zoned(pmap_t pmap, vm_offset_t start, vm_offset_t end,
     vm_page_t m_start, vm_prot_t prot)
 {
@@ -4512,7 +4513,7 @@ pmap_enter_object_zoned(pmap_t pmap, vm_offset_t start, vm_offset_t end,
  * but is *MUCH* faster than pmap_enter...
  */
 
-void
+static void
 pmap_enter_quick_zoned(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot)
 {
 	struct rwlock *lock;
@@ -4662,7 +4663,7 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
  * processor address space.  Note that some shortcuts
  * are taken, but the code works.
  */
-void
+static void
 pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t object,
     vm_pindex_t pindex, vm_size_t size)
 {
@@ -4681,7 +4682,7 @@ pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t object,
  *	The wired attribute of the page table entry is not a hardware feature,
  *	so there is no need to invalidate any TLB entries.
  */
-void
+static void
 pmap_unwire_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 {
 	vm_offset_t va_next;
@@ -4778,7 +4779,7 @@ pmap_unwire_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
  *	Because the executable mappings created by this routine are copied,
  *	it should not have to flush the instruction cache.
  */
-void
+static void
 pmap_copy_zoned(pmap_t dst_pmap, pmap_t src_pmap, vm_offset_t dst_addr, vm_size_t len,
     vm_offset_t src_addr)
 {
@@ -4954,7 +4955,7 @@ out:
  *	pmap_zero_page zeros the specified hardware page by mapping
  *	the page into KVM and using bzero to clear its contents.
  */
-void
+static void
 pmap_zero_page_zoned(vm_page_t m)
 {
 	vm_offset_t va = PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m));
@@ -4968,7 +4969,7 @@ pmap_zero_page_zoned(vm_page_t m)
  *
  *	off and size may not cover an area beyond a single hardware page.
  */
-void
+static void
 pmap_zero_page_area_zoned(vm_page_t m, int off, int size)
 {
 	vm_offset_t va = PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m));
@@ -4985,7 +4986,7 @@ pmap_zero_page_area_zoned(vm_page_t m, int off, int size)
  *	bcopy to copy the page, one machine dependent page at a
  *	time.
  */
-void
+static void
 pmap_copy_page_zoned(vm_page_t msrc, vm_page_t mdst)
 {
 	vm_offset_t src = PHYS_TO_DMAP(VM_PAGE_TO_PHYS(msrc));
@@ -4996,7 +4997,7 @@ pmap_copy_page_zoned(vm_page_t msrc, vm_page_t mdst)
 
 int unmapped_buf_allowed = 1;
 
-void
+static void
 pmap_copy_pages_zoned(vm_page_t ma[], vm_offset_t a_offset, vm_page_t mb[],
     vm_offset_t b_offset, int xfersize)
 {
@@ -5032,14 +5033,14 @@ pmap_copy_pages_zoned(vm_page_t ma[], vm_offset_t a_offset, vm_page_t mb[],
 	}
 }
 
-vm_offset_t
+static vm_offset_t
 pmap_quick_enter_page_zoned(vm_page_t m)
 {
 
 	return (PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m)));
 }
 
-void
+static void
 pmap_quick_remove_page_zoned(vm_offset_t addr)
 {
 }
@@ -5051,7 +5052,7 @@ pmap_quick_remove_page_zoned(vm_offset_t addr)
  * is only necessary that true be returned for a small
  * subset of pmaps for proper page aging.
  */
-boolean_t
+static boolean_t
 pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m)
 {
 	struct md_page *pvh;
@@ -5096,7 +5097,7 @@ pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m)
  *	Return the number of managed mappings to the given physical page
  *	that are wired.
  */
-int
+static int
 pmap_page_wired_mappings_zoned(vm_page_t m)
 {
 	struct rwlock *lock;
@@ -5160,7 +5161,7 @@ restart:
  * Returns true if the given page is mapped individually or as part of
  * a 2mpage.  Otherwise, returns false.
  */
-bool
+static bool
 pmap_page_is_mapped_zoned(vm_page_t m)
 {
 	struct rwlock *lock;
@@ -5193,7 +5194,7 @@ pmap_page_is_mapped_zoned(vm_page_t m)
  * particular, a page table entry's dirty bit won't change state once
  * this function starts.
  */
-void
+static void
 pmap_remove_pages_zoned(pmap_t pmap)
 {
 	pd_entry_t *pde;
@@ -5457,7 +5458,7 @@ out:
  *	Return whether or not the specified physical page was modified
  *	in any physical maps.
  */
-boolean_t
+static boolean_t
 pmap_is_modified_zoned(vm_page_t m)
 {
 
@@ -5478,7 +5479,7 @@ pmap_is_modified_zoned(vm_page_t m)
  *	Return whether or not the specified virtual address is eligible
  *	for prefault.
  */
-boolean_t
+static boolean_t
 pmap_is_prefaultable_zoned(pmap_t pmap, vm_offset_t addr)
 {
 	pt_entry_t *pte;
@@ -5501,7 +5502,7 @@ pmap_is_prefaultable_zoned(pmap_t pmap, vm_offset_t addr)
  *	Return whether or not the specified physical page was referenced
  *	in any physical maps.
  */
-boolean_t
+static boolean_t
 pmap_is_referenced_zoned(vm_page_t m)
 {
 
@@ -5513,7 +5514,7 @@ pmap_is_referenced_zoned(vm_page_t m)
 /*
  * Clear the write and modified bits in each of the given page's mappings.
  */
-void
+static void
 pmap_remove_write_zoned(vm_page_t m)
 {
 	struct md_page *pvh;
@@ -5604,7 +5605,7 @@ retry:
  *	dirty pages.  Those dirty pages will only be detected by a future call
  *	to pmap_is_modified_zoned().
  */
-int
+static int
 pmap_ts_referenced_zoned(vm_page_t m)
 {
 	struct md_page *pvh;
@@ -5760,7 +5761,7 @@ out:
  *	given pmap.  Depending on the advice, clear the referenced and/or
  *	modified flags in each mapping and set the mapped page's dirty field.
  */
-void
+static void
 pmap_advise_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, int advice)
 {
 	struct rwlock *lock;
@@ -5891,7 +5892,7 @@ maybe_invlrng:
 /*
  *	Clear the modify bits on the specified physical page.
  */
-void
+static void
 pmap_clear_modify_zoned(vm_page_t m)
 {
 	struct md_page *pvh;
@@ -5974,7 +5975,7 @@ restart:
 	rw_wunlock(lock);
 }
 
-void *
+static void *
 pmap_mapbios_zoned(vm_paddr_t pa, vm_size_t size)
 {
 	struct pmap_preinit_mapping *ppim;
@@ -6081,7 +6082,7 @@ pmap_mapbios_zoned(vm_paddr_t pa, vm_size_t size)
 	return ((void *)(va + offset));
 }
 
-void
+static void
 pmap_unmapbios_zoned(vm_offset_t va, vm_size_t size)
 {
 	struct pmap_preinit_mapping *ppim;
@@ -6150,7 +6151,7 @@ pmap_unmapbios_zoned(vm_offset_t va, vm_size_t size)
 /*
  * Sets the memory attribute for the specified page.
  */
-void
+static void
 pmap_page_set_memattr_zoned(vm_page_t m, vm_memattr_t ma)
 {
 
@@ -6186,7 +6187,7 @@ pmap_page_set_memattr_zoned(vm_page_t m, vm_memattr_t ma)
  * latter case, the memory type may have been changed on some part of the
  * virtual address range or the direct map.
  */
-int
+static int
 pmap_change_attr_zoned(vm_offset_t va, vm_size_t size, int mode)
 {
 	int error;
@@ -6204,7 +6205,7 @@ pmap_change_attr_zoned(vm_offset_t va, vm_size_t size, int mode)
  * be a subset of the requested protections; for example, mappings in the direct
  * map are never executable.
  */
-int
+static int
 pmap_change_prot_zoned(vm_offset_t va, vm_size_t size, vm_prot_t prot)
 {
 	int error;
@@ -6393,7 +6394,7 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 			return (NULL);
 	}
 
-	if ((ml2 = smh_page_alloc(&pmap_heap, 1)) ==
+	if ((ml2 = pmap_secure_vm_page()) ==
 	    NULL) {
 		CTR2(KTR_PMAP, "pmap_demote_l1: failure for va %#lx"
 		    " in pmap %p", va, pmap);
@@ -6527,7 +6528,7 @@ pmap_demote_l2_locked(pmap_t pmap, pt_entry_t *l2, vm_offset_t va,
 		 * priority (VM_ALLOC_INTERRUPT).  Otherwise, the
 		 * priority is normal.
 		 */
-		ml3 = smh_page_alloc(&pmap_heap, 1);
+		ml3 = pmap_secure_vm_page();
 
 		/*
 		 * If the allocation of the new page table page fails,
@@ -6629,7 +6630,7 @@ pmap_demote_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t va)
  * modified by this pmap, returns its physical address so that the caller can
  * find other mappings.
  */
-int
+static int
 pmap_mincore_zoned(pmap_t pmap, vm_offset_t addr, vm_paddr_t *pap)
 {
 	pt_entry_t *pte, tpte;
@@ -6787,7 +6788,7 @@ out:
  * Compute the value that should be stored in ttbr0 to activate the specified
  * pmap.  This value may change from time to time.
  */
-uint64_t
+static uint64_t
 pmap_to_ttbr0_zoned(pmap_t pmap)
 {
 
@@ -6842,7 +6843,7 @@ pmap_activate_int(pmap_t pmap)
 	return (true);
 }
 
-void
+static void
 pmap_activate_vm_zoned(pmap_t pmap)
 {
 
@@ -6851,7 +6852,7 @@ pmap_activate_vm_zoned(pmap_t pmap)
 	(void)pmap_activate_int(pmap);
 }
 
-void
+static void
 pmap_activate_zoned(struct thread *td)
 {
 	pmap_t	pmap;
@@ -6867,7 +6868,7 @@ pmap_activate_zoned(struct thread *td)
  * To eliminate the unused parameter "old", we would have to add an instruction
  * to cpu_switch().
  */
-struct pcb *
+static struct pcb *
 pmap_switch_zoned(struct thread *old __unused, struct thread *new)
 {
 	pcpu_bp_harden bp_harden;
@@ -6903,7 +6904,7 @@ pmap_switch_zoned(struct thread *old __unused, struct thread *new)
 	return (pcb);
 }
 
-void
+static void
 pmap_sync_icache_zoned(pmap_t pmap, vm_offset_t va, vm_size_t sz)
 {
 
@@ -7007,7 +7008,7 @@ fault_exec:
 	return (rv);
 }
 
-int
+static int
 pmap_fault_zoned(pmap_t pmap, uint64_t esr, uint64_t far)
 {
 	pt_entry_t pte, *ptep;
@@ -7108,7 +7109,7 @@ pmap_fault_zoned(pmap_t pmap, uint64_t esr, uint64_t far)
  *	Increase the starting virtual address of the given mapping if a
  *	different alignment might result in more superpage mappings.
  */
-void
+static void
 pmap_align_superpage_zoned(vm_object_t object, vm_ooffset_t offset,
     vm_offset_t *addr, vm_size_t size)
 {
@@ -7145,7 +7146,7 @@ pmap_align_superpage_zoned(vm_object_t object, vm_ooffset_t offset,
  *          finished or FALSE otherwise.
  *
  */
-boolean_t
+static boolean_t
 pmap_map_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
     boolean_t can_fault)
 {
@@ -7189,7 +7190,7 @@ pmap_map_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
 	return (needs_mapping);
 }
 
-void
+static void
 pmap_unmap_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
     boolean_t can_fault)
 {
@@ -7206,7 +7207,7 @@ pmap_unmap_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
 	}
 }
 
-boolean_t
+static boolean_t
 pmap_is_valid_memattr_zoned(pmap_t pmap __unused, vm_memattr_t mode)
 {
 
@@ -7458,6 +7459,19 @@ SYSCTL_OID(_vm_pmap, OID_AUTO, kernel_maps,
  * unzoned calls into priveleged instructions
  */
 
+static vm_page_t
+pmap_secure_vm_page(void)
+{
+	// replaces vm_page_alloc_noobj(int req) --> _vm_page_alloc_noobj_domain
+	// also see vm_page_initfake
+	// VM_MEMATTR_WRITE_BACK gets stuck in fs mount
+	vm_page_t m = vm_page_getfake(pmap_kextract_zoned((vm_offset_t) smh_page_alloc(&pmap_heap, 1)), VM_MEMATTR_UNCACHEABLE);
+	m->flags = PG_ZERO | m->flags;
+	m->busy_lock = VPB_UNBUSIED; // or VPB_CURTHREAD_EXCLUSIVE?
+	vm_wire_add(1);
+	// m->a.flags = 0; // maybe? currently m->a.queue = PQ_NONE instead
+	return m;
+}
 
 enum pmap_external_fn {
 	pmap_page_set_memattr_enum,
@@ -7782,7 +7796,7 @@ pmap_kextract(vm_offset_t va)
 	return (vm_paddr_t) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
 
-void
+PMAP_INLINE void
 pmap_kremove(vm_offset_t va)
 {
 	uint64_t args[] = {(uint64_t) va};

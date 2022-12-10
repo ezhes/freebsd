@@ -1,30 +1,16 @@
 # Notes
 
-## Replacement description
+## Important status of implementation notes
 
-"pmap_enter_with_options(a,b,c)" -> "trampoline_func(PMAP_ENTER_WITH_OPTIONS_CALL_NR, a, b, c)"
-
-allison will provide:
-void *
-zone_enter(enum zone_id, void *ur_dispatch_data)
-
-you need to provide a function of signature:
-void *
-pmap_dispatch(void *ur_dispatch_data)
-
-for testing before zone manager is done:
-void *
-zone_enter(enum zone_id, void *ur_dispatch_data) {
-	return pmap_dispatch(ur_dispatch_data);
-}
-
-## What does what
-
-I'll work on the zone manager stuff in the middle which will allow you to specify a pointer/other arguments and the zone you want to enter. The zone manager will switch the protections and then begin execution from that zone's dispatch function, which it can then use to invoke whatever actual protected function you want
-
-## Build & run kernel
-
-* How to run a built kernel image (use the qemu instructions from above, scp the kernel image (for me it's at obj/home/allison/freebsd/src/arm64.aarch64/sys/GENERIC/kernel) to /boot/kernel/kernel, reboot and pray. if the image doesn't work, delete the image and reboot the clean one to install a new image. There's a better way to do this on FreeBSD since you can actually mount the disk image for the VM to install the kernel (i.e. without using scp) but on linux it's a pain in the ass since Linux doesn't support writing to UFS. This should save y'all from needing actual hardware and UARTs. I'm still going to test on hardware since I don't trust qemu's watchpoints fully since we're doing really weird shit but we'll see.
+* often get "panic: data abort in critical section or under mutex" at handle_el0_sync+0x38
+* spinlocks get stuck sometimes
+* replacement can sleep (uses `M_WAITOK` in `vm_page_getfake`)
+  * easily fixed by having a separate version of this that doesn't allow sleep
+* `kmem_malloc` replacement requires `smh_init` to be before `pmap_init`
+  * causes a lot of the above panics, but can boot and stay up for some time
+* `pmap_grow_kernel_zoned` uses `vm_page_alloc_noobj`
+  * `kmem_init` causes `pmap_grow_kernel_zoned`, but `smh_init` can't be before `kmem_init`
+  * idea: have a `pmap_grow_kernel_early` that uses `vm_page_alloc_noobj`, check if early boot, panic if not
 
 ## Problems -> memory mapped watchpoints
 
@@ -57,10 +43,6 @@ Note though that now that we're using memory mapped IO instead of the control re
 
 So, problem discovered and problem solved lol.
 
-## Immediate work
-
-@Zoey Mengzhu Sun and you need to write the black shims and the pmap_zone_dispatch stuff. I'll provide the glue that gets you from zone_enter to dispatch, but y'all need to a) do the plumbing for this and b) figure out a way to allocate all page table data into a single contiguous section of virtual memory. Right now a lot of the operations are probably going through the physmap (a region which is just all of physical memory mapped into virtual memory) but we intend to make the pmap owned pages read-only in the physmap to prevent them from being tampered through it
-
 ## Useful files
 
 pmap
@@ -72,7 +54,6 @@ vm_extern
 vm_kern // has vm_maps
 vm_page
 vm_phys
-rwlock.h
 
 ## Interesting structs & fns
 
@@ -267,7 +248,7 @@ llvm-objdump-14 -D path/to/kernel --start-address=your_address | less
 * vm_page_alloc_noobj(int req)
   * seen attrs: vm_alloc_wired, vm_alloc_interrupt, vm_alloc_zero, vm_alloc_waitok
   * can pass VM_ALLOC_NOWAIT
-  * TODO replace with `smh_calloc`, seems to be just getting page table pages
+  * replace with `smh_calloc`, seems to be just getting page table pages
 * kva_alloc(vm_size_t size)
   * allocates VA only, not actual memory
   * used in conjunction with `pmap_kenter_zoned` to add a phys page somewhere in kernel, later remove
@@ -312,3 +293,150 @@ llvm-objdump-14 -D path/to/kernel --start-address=your_address | less
   * : `vm_page_alloc_check`
   * : `vm_wire_add`
 * above bad: `vm_domainset_iter_page(struct`
+
+## 12/9 crashes
+
+### illegal data abort in handle_el0_sync
+
+Earliest this happens is at "Trying to mount root from ufs:/dev/gpt/rootfs \[rw\]...". Can happen after boot as well.
+
+Making `vm_page_alloc_noobj` replacement use `VM_MEMATTR_WRITE_BACK` made this happen most of the time right after the above.
+
+`smh_init` before `pmap_init` makes this way more probable a little after fs mount starts.
+
+```
+  x0:         40a13000
+  x1:                0
+  x2:                1
+  x3:         40418720
+  x4:          28f5c28
+  x5:           a3d70b
+  x6:               83
+  x7:              16d
+  x8:           13abc8
+  x9:         3b049374
+ x10:                0
+ x11:               11
+ x12:           13ac08
+ x13:            75220
+ x14:               1a
+ x15:         ffffffff
+ x16:           13a978
+ x17:           119ca0
+ x18:                1
+ x19:         40a392a0
+ x20:         40a23060
+ x21:                0
+ x22:           13abc0
+ x23:                b
+ x24:           13a000
+ x25:                0
+ x26:         3b9aca00
+ x27:           13a000
+ x28:           10377c
+ x29:     ffffffffe9e0
+  sp:     ffffffffe9e0
+  lr:           115f3c
+ elr:           119ca0
+spsr:              200
+ far:     ffffffffe9d0
+ esr:         9200004f
+panic: data abort in critical section or under mutex
+cpuid = 3
+time = 1652353500
+KDB: stack backtrace:
+#0 0xffff0000004f80a8 at kdb_backtrace+0x60
+#1 0xffff0000004a43e8 at vpanic+0x178
+#2 0xffff0000004a426c at panic+0x44
+#3 0xffff0000007d4ee8 at data_abort+0x268
+#4 0xffff0000007b58fc at handle_el0_sync+0x38
+Uptime: 11m1s
+```
+
+### spin lock held for too long
+
+```
+spin lock 0xffff0000497cb100 (sched lock 1) held by 0xffff00005ad53580 (tid 100059) too long
+  x0: ffff0000008d1000
+  x1: ffff000049bf2070
+  x2: ffff0000008b9a30
+  x3:         deadc0d8
+  x4:                0
+  x5: ffff0000007d4c68
+  x6:                1
+  x7:              501
+  x8: ffff000000de1b28
+  x9:         deadc0de
+ x10:          3938700
+ x11:           9897fe
+ x12:                f
+ x13: ffff0000007c3588
+ x14:         7ff6d8cd
+ x15:               40
+ x16:               8c
+ x17:              cf4
+ x18: ffff000049bf2060
+ x19: ffff000000de1b28
+ x20: ffff00005ad53580
+ x21:                0
+ x22: ffff00005ad53580
+ x23:                0
+ x24: ffff000000b8f000
+ x25:           98967f
+ x26: ffff000000de1b40
+ x27: ffff000049fcadfc
+ x28: ffff000000e7144c
+ x29: ffff000049bf2060
+  sp: ffff000049bf2060
+  lr: ffff00000047c290
+ elr: ffff00000047c0d8
+spsr:              2c5
+ far:         deadc178
+ esr:         96000004
+timeout stopping cpus
+panic: spin lock held too long
+cpuid = 0
+time = 1652351310
+KDB: stack backtrace:
+#0 0xffff0000004f80a8 at kdb_backtrace+0x60
+#1 0xffff0000004a43e8 at vpanic+0x178
+#2 0xffff0000004a426c at panic+0x44
+#3 0xffff00000047c0f0 at _mtx_lock_indefinite_check+0x88
+#4 0xffff00000047c28c at thread_lock_flags_+0xd8
+#5 0xffff0000004583cc at intr_event_schedule_thread+0x6c
+#6 0xffff000000458974 at swi_sched+0xa4
+#7 0xffff000000420d60 at handleevents+0x188
+#8 0xffff0000004219a4 at timercb+0x304
+#9 0xffff0000007ac028 at arm_tmr_intr+0x5c
+#10 0xffff000000458a44 at intr_event_handle+0xa8
+#11 0xffff0000007a7d28 at intr_isrc_dispatch+0x70
+#12 0xffff0000007aca3c at arm_gic_intr+0x120
+#13 0xffff0000007a7ae0 at intr_irq_handler+0x7c
+#14 0xffff0000007b5870 at handle_el1h_irq+0xc
+#15 0xffff000000755c90 at ufs_open+0x7c
+#16 0xffff000000893b44 at VOP_OPEN_APV+0x2c
+#17 0xffff00000044afd4 at exec_check_permissions+0xe8
+timeout stopping cpus
+panic: data abort in critical section or under mutex
+cpuid = 1
+time = 1652351310
+KDB: stack backtrace:
+#0 0xffff0000004f80a8 at kdb_backtrace+0x60
+#1 0xffff0000004a43e8 at vpanic+0x178
+#2 0xffff0000004a426c at panic+0x44
+#3 0xffff0000007d4ed0 at data_abort+0x268
+#4 0xffff0000007b5810 at handle_el1h_sync+0x10
+#5 0xffff00000047c28c at thread_lock_flags_+0xd8
+#6 0xffff00000047c28c at thread_lock_flags_+0xd8
+#7 0xffff0000004200e4 at statclock+0xd8
+#8 0xffff000000420cd4 at handleevents+0xfc
+#9 0xffff0000004219a4 at timercb+0x304
+#10 0xffff0000007ac028 at arm_tmr_intr+0x5c
+#11 0xffff000000458a44 at intr_event_handle+0xa8
+#12 0xffff0000007a7d28 at intr_isrc_dispatch+0x70
+#13 0xffff0000007aca3c at arm_gic_intr+0x120
+#14 0xffff0000007a7ae0 at intr_irq_handler+0x7c
+#15 0xffff0000007b5870 at handle_el1h_irq+0xc
+#16 0xffff0000007cdfd8 at pmap_fault+0x2c
+#17 0xffff0000007d4ce0 at data_abort+0x78
+```
