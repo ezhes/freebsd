@@ -15,7 +15,7 @@ publics = 'void pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma);\
     void	pmap_kremove_device(vm_offset_t, vm_size_t);\
     void	*pmap_mapdev_attr(vm_offset_t pa, vm_size_t size, vm_memattr_t ma);\
     bool	pmap_page_is_mapped(vm_page_t m);\
-    int	pmap_pinit_stage(pmap_t, enum pmap_stage, int);\
+    int	pmap_pinit_stage(pmap_t *pmap, enum pmap_stage, int);\
     bool	pmap_ps_enabled(pmap_t pmap);\
     uint64_t pmap_to_ttbr0(pmap_t pmap);\
     \
@@ -405,8 +405,8 @@ if __name__ == "__main__":
             #         secure_calloc + get_call_arg(call, 0) + ', 1)'),
             ('vmem_alloc(',
                 lambda call: '0;\n\t\t\t/*' + call + '*/\n\t\t\tpanic("pmap_map_io_transient_zoned: this should never have been called")'),
-            ('vm_page_alloc_noobj(',
-                lambda _call: secure_page + '1)'),
+            # ('vm_page_alloc_noobj(',
+            #     lambda _call: secure_page + '1)'),
             ]
         lines = pmapc.split('\n')
         for idx in range(len(lines)):
