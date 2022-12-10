@@ -322,7 +322,7 @@ vmspace_zdtor(void *mem, int size, void *arg)
  * and initialize those structures.  The refcnt is set to 1.
  */
 struct vmspace *
-vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
+vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_tt pinit)
 {
 	struct vmspace *vm;
 

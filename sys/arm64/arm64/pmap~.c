@@ -1764,31 +1764,34 @@ pmap_pinit0(pmap_t pmap)
 }
 
 int
-pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
+pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels) 
 {
+	*pmap = smh_malloc(&pmap_heap, sizeof(struct pmap)); 
+
 	vm_page_t m;
 
 	/*
 	 * allocate the l0 page
 	 */
 	m = vm_page_alloc_noobj(VM_ALLOC_WAITOK | VM_ALLOC_WIRED |
-	    VM_ALLOC_ZERO);
-	pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
-	pmap->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP(pmap->pm_l0_paddr);
+	    VM_ALLOC_ZERO);    
+ 
+	(*pmap)->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
+	(*pmap)->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP((*pmap)->pm_l0_paddr); 
 
-	vm_radix_init(&pmap->pm_root);
-	bzero(&pmap->pm_stats, sizeof(pmap->pm_stats));
-	pmap->pm_cookie = COOKIE_FROM(-1, INT_MAX);
+	vm_radix_init(&((*pmap)->pm_root));
+	bzero(&((*pmap)->pm_stats), sizeof((*pmap)->pm_stats));
+	(*pmap)->pm_cookie = COOKIE_FROM(-1, INT_MAX);
 
 	MPASS(levels == 3 || levels == 4);
-	pmap->pm_levels = levels;
-	pmap->pm_stage = stage;
+	(*pmap)->pm_levels = levels;
+	(*pmap)->pm_stage = stage;
 	switch (stage) {
 	case PM_STAGE1:
-		pmap->pm_asid_set = &asids;
+		(*pmap)->pm_asid_set = &asids;
 		break;
 	case PM_STAGE2:
-		pmap->pm_asid_set = &vmids;
+		(*pmap)->pm_asid_set = &vmids;
 		break;
 	default:
 		panic("%s: Invalid pmap type %d", __func__, stage);
@@ -1796,25 +1799,25 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 	}
 
 	/* XXX Temporarily disable deferred ASID allocation. */
-	pmap_alloc_asid(pmap);
+	pmap_alloc_asid(*pmap);
 
 	/*
 	 * Allocate the level 1 entry to use as the root. This will increase
 	 * the refcount on the level 1 page so it won't be removed until
 	 * pmap_release() is called.
 	 */
-	if (pmap->pm_levels == 3) {
-		PMAP_LOCK(pmap);
-		m = _pmap_alloc_l3(pmap, NUL2E + NUL1E, NULL);
-		PMAP_UNLOCK(pmap);
+	if ((*pmap)->pm_levels == 3) {
+		PMAP_LOCK(*pmap);
+		m = _pmap_alloc_l3(*pmap, NUL2E + NUL1E, NULL);
+		PMAP_UNLOCK(*pmap);
 	}
-	pmap->pm_ttbr = VM_PAGE_TO_PHYS(m);
+	(*pmap)->pm_ttbr = VM_PAGE_TO_PHYS(m);
 
 	return (1);
 }
 
 int
-pmap_pinit(pmap_t pmap)
+pmap_pinit(pmap_t *pmap)
 {
 
 	return (pmap_pinit_stage(pmap, PM_STAGE1, 4));
