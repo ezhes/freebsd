@@ -1766,7 +1766,7 @@ pmap_pinit0(pmap_t pmap)
 int
 pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels) //pmap is a double pointer in argument
 {
-	*pmap = smh_malloc(&pmap_heap, sizeof(pmap_t)); // dereference pmap_t to get struct pmap
+	*pmap = smh_malloc(&pmap_heap, sizeof(struct pmap)); // dereference pmap_t to get struct pmap
 
 	vm_page_t m;
 
