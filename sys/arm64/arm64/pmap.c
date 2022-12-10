@@ -149,6 +149,10 @@ __FBSDID("$FreeBSD$");
 #include <machine/machdep.h>
 #include <machine/md_var.h>
 #include <machine/pcb.h>
+#include <machine/zone_manager.h>
+#include <sys/secure_memory_heap.h>
+
+extern struct secure_memory_heap pmap_heap;
 
 #define	PMAP_ASSERT_STAGE1(pmap)	MPASS((pmap)->pm_stage == PM_STAGE1)
 #define	PMAP_ASSERT_STAGE2(pmap)	MPASS((pmap)->pm_stage == PM_STAGE2)
@@ -673,10 +677,6 @@ pmap_pte(pmap_t pmap, vm_offset_t va, int *level)
 bool
 pmap_ps_enabled_zoned(pmap_t pmap __unused)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 
 	return (superpages_enabled != 0);
 }
@@ -685,10 +685,6 @@ bool
 pmap_get_tables_zoned(pmap_t pmap, vm_offset_t va, pd_entry_t **l0, pd_entry_t **l1,
     pd_entry_t **l2, pt_entry_t **l3)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pd_entry_t *l0p, *l1p, *l2p;
 
 	if (pmap->pm_l0 == NULL)
@@ -1330,10 +1326,6 @@ pmap_invalidate_all(pmap_t pmap)
 vm_paddr_t
 pmap_extract_zoned(pmap_t pmap, vm_offset_t va)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pt_entry_t *pte, tpte;
 	vm_paddr_t pa;
 	int lvl;
@@ -1383,10 +1375,6 @@ pmap_extract_zoned(pmap_t pmap, vm_offset_t va)
 vm_page_t
 pmap_extract_and_hold_zoned(pmap_t pmap, vm_offset_t va, vm_prot_t prot)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pt_entry_t *pte, tpte;
 	vm_offset_t off;
 	vm_page_t m;
@@ -1833,10 +1821,6 @@ pmap_abort_ptp(pmap_t pmap, vm_offset_t va, vm_page_t mpte)
 void
 pmap_pinit0_zoned(pmap_t pmap)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 
 	PMAP_LOCK_INIT(pmap);
 	bzero(&pmap->pm_stats, sizeof(pmap->pm_stats));
@@ -1855,17 +1839,12 @@ pmap_pinit0_zoned(pmap_t pmap)
 int
 pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	vm_page_t m;
 
 	/*
 	 * allocate the l0 page
 	 */
-	m = vm_page_alloc_noobj(VM_ALLOC_WAITOK | VM_ALLOC_WIRED |
-	    VM_ALLOC_ZERO);
+	m = smh_page_alloc(&pmap_heap, 1);
 	pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
 	pmap->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP(pmap->pm_l0_paddr);
 
@@ -1909,10 +1888,6 @@ pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 int
 pmap_pinit_zoned(pmap_t pmap)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 
 	return (pmap_pinit_stage_zoned(pmap, PM_STAGE1, 4));
 }
@@ -1938,7 +1913,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 	/*
 	 * Allocate a page table page.
 	 */
-	if ((m = vm_page_alloc_noobj(VM_ALLOC_WIRED | VM_ALLOC_ZERO)) == NULL) {
+	if ((m = smh_page_alloc(&pmap_heap, 1)) == NULL) {
 		if (lockp != NULL) {
 			RELEASE_PV_LIST_LOCK(lockp);
 			PMAP_UNLOCK(pmap);
@@ -2186,10 +2161,6 @@ retry:
 void
 pmap_release_zoned(pmap_t pmap)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	boolean_t rv;
 	struct spglist free;
 	struct asid_set *set;
@@ -2290,7 +2261,7 @@ pmap_growkernel_zoned(vm_offset_t addr)
 		l1 = pmap_l0_to_l1(l0, kernel_vm_end);
 		if (pmap_load(l1) == 0) {
 			/* We need a new PDP entry */
-			nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT |
+			nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT |//script_ignore
 			    VM_ALLOC_WIRED | VM_ALLOC_ZERO);
 			if (nkpg == NULL)
 				panic("pmap_growkernel: no memory to grow kernel");
@@ -2311,7 +2282,7 @@ pmap_growkernel_zoned(vm_offset_t addr)
 			continue;
 		}
 
-		nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT | VM_ALLOC_WIRED |
+		nkpg = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT | VM_ALLOC_WIRED |//script_ignore
 		    VM_ALLOC_ZERO);
 		if (nkpg == NULL)
 			panic("pmap_growkernel: no memory to grow kernel");
@@ -2660,7 +2631,7 @@ retry:
 		}
 	}
 	/* No free items, allocate another chunk */
-	m = vm_page_alloc_noobj(VM_ALLOC_WIRED);
+	m = smh_page_alloc(&pmap_heap, 1);
 	if (m == NULL) {
 		if (lockp == NULL) {
 			PV_STAT(pc_chunk_tryfail++);
@@ -2725,7 +2696,7 @@ retry:
 			break;
 	}
 	for (reclaimed = false; avail < needed; avail += _NPCPV) {
-		m = vm_page_alloc_noobj(VM_ALLOC_WIRED);
+		m = smh_page_alloc(&pmap_heap, 1);
 		if (m == NULL) {
 			m = reclaim_pv_chunk(pmap, lockp);
 			if (m == NULL)
@@ -3131,10 +3102,6 @@ pmap_remove_l3_range(pmap_t pmap, pd_entry_t l2e, vm_offset_t sva,
 void
 pmap_remove_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	struct rwlock *lock;
 	vm_offset_t va_next;
 	pd_entry_t *l0, *l1, *l2;
@@ -3388,10 +3355,6 @@ pmap_protect_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t sva, pt_entry_t mask,
 void
 pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	vm_offset_t va, va_next;
 	pd_entry_t *l0, *l1, *l2;
 	pt_entry_t *l3p, l3, mask, nbits;
@@ -3812,10 +3775,6 @@ int
 pmap_senter_zoned(pmap_t pmap, vm_offset_t va, vm_paddr_t pa,
     vm_prot_t prot, u_int flags)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pd_entry_t *pde;
 	pt_entry_t new_l3, orig_l3;
 	pt_entry_t *l3;
@@ -3878,10 +3837,6 @@ out:
 int
 pmap_sremove_zoned(pmap_t pmap, vm_offset_t va)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pt_entry_t *pte;
 	int lvl;
 	int rc;
@@ -3912,10 +3867,6 @@ pmap_sremove_zoned(pmap_t pmap, vm_offset_t va)
 void
 pmap_sremove_pages_zoned(pmap_t pmap)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pd_entry_t l0e, *l1, l1e, *l2, l2e;
 	pt_entry_t *l3, l3e;
 	vm_page_t m, m0, m1;
@@ -4011,10 +3962,6 @@ int
 pmap_enter_zoned(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
     u_int flags, int8_t psind)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	struct rwlock *lock;
 	pd_entry_t *pde;
 	pt_entry_t new_l3, orig_l3;
@@ -4528,10 +4475,6 @@ void
 pmap_enter_object_zoned(pmap_t pmap, vm_offset_t start, vm_offset_t end,
     vm_page_t m_start, vm_prot_t prot)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	struct rwlock *lock;
 	vm_offset_t va;
 	vm_page_t m, mpte;
@@ -4572,10 +4515,6 @@ pmap_enter_object_zoned(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 void
 pmap_enter_quick_zoned(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	struct rwlock *lock;
 
 	lock = NULL;
@@ -4727,10 +4666,6 @@ void
 pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t object,
     vm_pindex_t pindex, vm_size_t size)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 
 	VM_OBJECT_ASSERT_WLOCKED(object);
 	KASSERT(object->type == OBJT_DEVICE || object->type == OBJT_SG,
@@ -4749,10 +4684,6 @@ pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t object,
 void
 pmap_unwire_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	vm_offset_t va_next;
 	pd_entry_t *l0, *l1, *l2;
 	pt_entry_t *l3;
@@ -4851,13 +4782,6 @@ void
 pmap_copy_zoned(pmap_t dst_pmap, pmap_t src_pmap, vm_offset_t dst_addr, vm_size_t len,
     vm_offset_t src_addr)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, dst_pmap)) {
-		panic("Invalid dst_pmap in argument");
-	}
-	if (!pmap_valid_pmap(pmap_whitelist, src_pmap)) {
-		panic("Invalid src_pmap in argument");
-	}
-
 	struct rwlock *lock;
 	pd_entry_t *l0, *l1, *l2, srcptepaddr;
 	pt_entry_t *dst_pte, mask, nbits, ptetemp, *src_pte;
@@ -5130,10 +5054,6 @@ pmap_quick_remove_page_zoned(vm_offset_t addr)
 boolean_t
 pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	struct md_page *pvh;
 	struct rwlock *lock;
 	pv_entry_t pv;
@@ -5276,10 +5196,6 @@ pmap_page_is_mapped_zoned(vm_page_t m)
 void
 pmap_remove_pages_zoned(pmap_t pmap)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pd_entry_t *pde;
 	pt_entry_t *pte, tpte;
 	struct spglist free;
@@ -5565,10 +5481,6 @@ pmap_is_modified_zoned(vm_page_t m)
 boolean_t
 pmap_is_prefaultable_zoned(pmap_t pmap, vm_offset_t addr)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pt_entry_t *pte;
 	boolean_t rv;
 	int lvl;
@@ -5851,10 +5763,6 @@ out:
 void
 pmap_advise_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, int advice)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	struct rwlock *lock;
 	vm_offset_t va, va_next;
 	vm_page_t m;
@@ -6485,7 +6393,7 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 			return (NULL);
 	}
 
-	if ((ml2 = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT | VM_ALLOC_WIRED)) ==
+	if ((ml2 = smh_page_alloc(&pmap_heap, 1)) ==
 	    NULL) {
 		CTR2(KTR_PMAP, "pmap_demote_l1: failure for va %#lx"
 		    " in pmap %p", va, pmap);
@@ -6619,9 +6527,7 @@ pmap_demote_l2_locked(pmap_t pmap, pt_entry_t *l2, vm_offset_t va,
 		 * priority (VM_ALLOC_INTERRUPT).  Otherwise, the
 		 * priority is normal.
 		 */
-		ml3 = vm_page_alloc_noobj(
-		    (VIRT_IN_DMAP(va) ? VM_ALLOC_INTERRUPT : 0) |
-		    VM_ALLOC_WIRED);
+		ml3 = smh_page_alloc(&pmap_heap, 1);
 
 		/*
 		 * If the allocation of the new page table page fails,
@@ -6726,10 +6632,6 @@ pmap_demote_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t va)
 int
 pmap_mincore_zoned(pmap_t pmap, vm_offset_t addr, vm_paddr_t *pap)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pt_entry_t *pte, tpte;
 	vm_paddr_t mask, pa;
 	int lvl, val;
@@ -6888,10 +6790,6 @@ out:
 uint64_t
 pmap_to_ttbr0_zoned(pmap_t pmap)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 
 	return (ASID_TO_OPERAND(COOKIE_TO_ASID(pmap->pm_cookie)) |
 	    pmap->pm_ttbr);
@@ -6947,10 +6845,6 @@ pmap_activate_int(pmap_t pmap)
 void
 pmap_activate_vm_zoned(pmap_t pmap)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 
 	PMAP_ASSERT_STAGE2(pmap);
 
@@ -7012,10 +6906,6 @@ pmap_switch_zoned(struct thread *old __unused, struct thread *new)
 void
 pmap_sync_icache_zoned(pmap_t pmap, vm_offset_t va, vm_size_t sz)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 
 	PMAP_ASSERT_STAGE1(pmap);
 	KASSERT(ADDR_IS_CANONICAL(va),
@@ -7120,10 +7010,6 @@ fault_exec:
 int
 pmap_fault_zoned(pmap_t pmap, uint64_t esr, uint64_t far)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 	pt_entry_t pte, *ptep;
 	register_t intr;
 	uint64_t ec, par;
@@ -7275,8 +7161,10 @@ pmap_map_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
 	for (i = 0; i < count; i++) {
 		paddr = VM_PAGE_TO_PHYS(page[i]);
 		if (__predict_false(!PHYS_IN_DMAP(paddr))) {
-			error = vmem_alloc(kernel_arena, PAGE_SIZE,
-			    M_BESTFIT | M_WAITOK, &vaddr[i]);
+			error = 0;
+			/*vmem_alloc(kernel_arena, PAGE_SIZE,
+			    M_BESTFIT | M_WAITOK, &vaddr[i])*/
+			panic("pmap_map_io_transient_zoned: this should never have been called");
 			KASSERT(error == 0, ("vmem_alloc failed: %d", error));
 			needs_mapping = TRUE;
 		} else {
@@ -7321,10 +7209,6 @@ pmap_unmap_io_transient_zoned(vm_page_t page[], vm_offset_t vaddr[], int count,
 boolean_t
 pmap_is_valid_memattr_zoned(pmap_t pmap __unused, vm_memattr_t mode)
 {
-	if (!pmap_valid_pmap(pmap_whitelist, pmap)) {
-		panic("Invalid pmap in argument");
-	}
-
 
 	return (mode >= VM_MEMATTR_DEVICE && mode <= VM_MEMATTR_WRITE_THROUGH);
 }
@@ -7574,7 +7458,6 @@ SYSCTL_OID(_vm_pmap, OID_AUTO, kernel_maps,
  * unzoned calls into priveleged instructions
  */
 
-#include <machine/zone_manager.h>
 
 enum pmap_external_fn {
 	pmap_page_set_memattr_enum,

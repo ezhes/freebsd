@@ -3,8 +3,6 @@
 #include <machine/armreg.h>
 #include <machine/zone_manager_asm.h>
 
-/* * * POSSIBLY INSECURE -- this allows re-entering the zone, which may not be safe */
-
 /*
 PLAN:
 
@@ -280,17 +278,16 @@ necessary.
 	*/
 	/* SP and LR, skip FP because it's not strictly necessary */
 	mov x11, sp
-	stp x11, x14, [x12, #-0x20]!
-	str x15, [x12, #0x10]
+	stp x11, x14, [x12, #-0x10]!
 	/* Pivot */
 	mov sp, x12
 
 	/* Dispatch! */
 	/* 
-	Since we don't support migration, just re-enable debug exceptions to exit
-	the zone but don't re-enable any others
+	Exit and re-enable the exceptions from our caller
+	Taints only x15, lr if argument is x15 
 	*/
-	msr DAIFClr, #(DAIF_D)
+	ZM_EXIT x15
 	
 	/* Move argument into place */
 	mov x0, x1
@@ -305,7 +302,7 @@ necessary.
 	verification since we exited the zone manager and don't necessarily 
 	trust the zone to not be maliciously invoking us.
 	*/
-	ZM_ENTER_NO_SAVE
+	ZM_ENTER x15
 
 #if 0
 	/* ABI violating function: returns in x9, taints x10, x11 */	
@@ -326,18 +323,18 @@ necessary.
 	/* Re-enable the watchpoint from the zone we just exited, x12. Taint x10. */
 	bl outlined_watchpoint_enable_one
 
-	/*
-	Stack pivot back
-	*/
-	ldr x15, [sp, #0x10]
-	ldp x10, lr, [sp], #0x20
-	mov sp, x10
-
 	/* 
 	Restore interrupts and exit ZM. 	
 	Taints only x15, lr if argument is x15  
 	*/
-	ZM_EXIT_TAIL x15
+	ZM_EXIT x15
+
+	/*
+	Stack pivot back
+	*/
+	ldp x10, lr, [sp], #0x10
+	mov sp, x10
+	ret 
 
 Learly_boot_bail:
 	/*
@@ -346,7 +343,7 @@ Learly_boot_bail:
 	we can simply call through on our same stack without manipulating the
 	watchpoints.
 	*/
-	msr DAIFClr, #(DAIF_D)
+	ZM_EXIT x15
 	/* Move argument into place */
 	mov x0, x1
 	/* Restore lr since we're not coming back... */
@@ -360,16 +357,9 @@ Lzm_zone_enter_oob_zone_id:
 	b panic_entered
 
 Lzm_zone_enter_invalid_state:
-	//adrp x0, Lzm_zone_enter_invalid_state_str
-	//add x0, x0, :lo12:Lzm_zone_enter_invalid_state_str
-	//b panic_entered
-	msr DAIFClr, #(DAIF_D)
-	/* Move argument into place */
-	mov x0, x1
-	/* Restore lr since we're not coming back... */
-	mov lr, x14
-	/* Yeet :) */
-	br x13
+	adrp x0, Lzm_zone_enter_invalid_state_str
+	add x0, x0, :lo12:Lzm_zone_enter_invalid_state_str
+	b panic_entered
 
 Lzone_return_invalid_state:
 	adrp x0, Lzone_return_invalid_state_str
