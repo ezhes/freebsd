@@ -1766,7 +1766,7 @@ pmap_pinit0(pmap_t pmap)
 int
 pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels) //pmap is a double pointer in argument
 {
-	*pmap = smh_malloc(&pmap_heap, sizeof(struct *pmap_t)); // dereference pmap_t to get struct pmap
+	*pmap = smh_malloc(&pmap_heap, sizeof(pmap_t)); // dereference pmap_t to get struct pmap
 
 	vm_page_t m;
 
@@ -1776,22 +1776,22 @@ pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels) //pmap is a do
 	m = vm_page_alloc_noobj(VM_ALLOC_WAITOK | VM_ALLOC_WIRED |
 	    VM_ALLOC_ZERO);    
 	// notice m is alloced to 
-	*pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
-	*pmap->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP(*pmap->pm_l0_paddr); // actual map pointer here
+	(*pmap)->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
+	(*pmap)->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP((*pmap)->pm_l0_paddr); // actual map pointer here
 
-	vm_radix_init(pmap->pm_root);
-	bzero(pmap->pm_stats, sizeof(*pmap->pm_stats));
-	*pmap->pm_cookie = COOKIE_FROM(-1, INT_MAX);
+	vm_radix_init(&((*pmap)->pm_root));
+	bzero(&((*pmap)->pm_stats), sizeof((*pmap)->pm_stats));
+	(*pmap)->pm_cookie = COOKIE_FROM(-1, INT_MAX);
 
 	MPASS(levels == 3 || levels == 4);
-	*pmap->pm_levels = levels;
-	*pmap->pm_stage = stage;
+	(*pmap)->pm_levels = levels;
+	(*pmap)->pm_stage = stage;
 	switch (stage) {
 	case PM_STAGE1:
-		*pmap->pm_asid_set = &asids;
+		(*pmap)->pm_asid_set = &asids;
 		break;
 	case PM_STAGE2:
-		*pmap->pm_asid_set = &vmids;
+		(*pmap)->pm_asid_set = &vmids;
 		break;
 	default:
 		panic("%s: Invalid pmap type %d", __func__, stage);
@@ -1806,12 +1806,12 @@ pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels) //pmap is a do
 	 * the refcount on the level 1 page so it won't be removed until
 	 * pmap_release() is called.
 	 */
-	if (*pmap->pm_levels == 3) {
+	if ((*pmap)->pm_levels == 3) {
 		PMAP_LOCK(*pmap);
 		m = _pmap_alloc_l3(*pmap, NUL2E + NUL1E, NULL);
 		PMAP_UNLOCK(*pmap);
 	}
-	*pmap->pm_ttbr = VM_PAGE_TO_PHYS(m);
+	(*pmap)->pm_ttbr = VM_PAGE_TO_PHYS(m);
 
 	return (1);
 }
@@ -1820,7 +1820,7 @@ int
 pmap_pinit(pmap_t *pmap)
 {
 
-	return (pmap_pinit_stage(*pmap, PM_STAGE1, 4));
+	return (pmap_pinit_stage(pmap, PM_STAGE1, 4));
 }
 
 /* ================ original pmap_pinit and pmap_pinit_stage ================== */
