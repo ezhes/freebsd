@@ -322,13 +322,13 @@ vmspace_zdtor(void *mem, int size, void *arg)
  * and initialize those structures.  The refcnt is set to 1.
  */
 struct vmspace *
-vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
+vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit, bool zm_secure)
 {
 	struct vmspace *vm;
 
 	vm = uma_zalloc(vmspace_zone, M_WAITOK);
 	KASSERT(vm->vm_map.pmap == NULL, ("vm_map.pmap must be NULL"));
-	if (!pinit(vmspace_pmap(vm))) {
+	if (!pinit(vmspace_pmap(vm), zm_secure)) {
 		uma_zfree(vmspace_zone, vm);
 		return (NULL);
 	}
@@ -4258,7 +4258,7 @@ vmspace_fork(struct vmspace *vm1, vm_ooffset_t *fork_charge)
 	old_map = &vm1->vm_map;
 	/* Copy immutable fields of vm1 to vm2. */
 	vm2 = vmspace_alloc(vm_map_min(old_map), vm_map_max(old_map),
-	    pmap_pinit);
+	    pmap_pinit, false);
 	if (vm2 == NULL)
 		return (NULL);
 
@@ -4830,14 +4830,14 @@ out:
  * mapped to it, then create a new one.  The new vmspace is null.
  */
 int
-vmspace_exec(struct proc *p, vm_offset_t minuser, vm_offset_t maxuser)
+vmspace_exec(struct proc *p, vm_offset_t minuser, vm_offset_t maxuser, bool zm_secure)
 {
 	struct vmspace *oldvmspace = p->p_vmspace;
 	struct vmspace *newvmspace;
 
 	KASSERT((curthread->td_pflags & TDP_EXECVMSPC) == 0,
 	    ("vmspace_exec recursed"));
-	newvmspace = vmspace_alloc(minuser, maxuser, pmap_pinit);
+	newvmspace = vmspace_alloc(minuser, maxuser, pmap_pinit, zm_secure);
 	if (newvmspace == NULL)
 		return (ENOMEM);
 	newvmspace->vm_swrss = oldvmspace->vm_swrss;

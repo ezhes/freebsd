@@ -1154,6 +1154,26 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 		sv_minuser = sv->sv_minuser;
 	else
 		sv_minuser = MAX(sv->sv_minuser, PAGE_SIZE);
+	
+	/* zm secure user process check */
+	int zm_check_idx;
+	int zm_start_idx = 0;
+	char zm_string[] = "zm_sec_";
+	bool zm_secure = false;
+	for (zm_check_idx = 0; imgp->execpath[zm_check_idx] != '\0'; zm_check_idx++) {
+		if (imgp->execpath[zm_check_idx] == '/') {
+			zm_start_idx = zm_check_idx + 1;
+		}
+	}
+	for (zm_check_idx = 0; imgp->execpath[zm_start_idx + zm_check_idx] != '\0'; zm_check_idx++) {
+		if (imgp->execpath[zm_start_idx + zm_check_idx] != zm_string[zm_check_idx]) {
+			if (zm_string[zm_check_idx] == '\0') {
+				zm_secure = true;
+			}
+			break;
+		}
+	}
+
 	if (refcount_load(&vmspace->vm_refcnt) == 1 &&
 	    vm_map_min(map) == sv_minuser &&
 	    vm_map_max(map) == sv->sv_maxuser &&
@@ -1170,8 +1190,9 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 		vm_map_modflags(map, 0, MAP_WIREFUTURE | MAP_ASLR |
 		    MAP_ASLR_IGNSTART | MAP_ASLR_STACK | MAP_WXORX);
 		vm_map_unlock(map);
+		vmspace->vm_pmap.secure_process = zm_secure;
 	} else {
-		error = vmspace_exec(p, sv_minuser, sv->sv_maxuser);
+		error = vmspace_exec(p, sv_minuser, sv->sv_maxuser, zm_secure);
 		if (error)
 			return (error);
 		vmspace = p->p_vmspace;

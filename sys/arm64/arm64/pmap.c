@@ -228,7 +228,7 @@ page_to_pvh(vm_page_t m)
 		if (*_lockp != NULL)			\
 			rw_wunlock(*_lockp);		\
 		*_lockp = _new_lock;			\
-		rw_wlock_spin(*_lockp);			\
+		rw_wlock(*_lockp);			\
 	}						\
 } while (0)
 
@@ -396,7 +396,7 @@ static vm_paddr_t pmap_kextract_zoned(vm_offset_t va);
 static inline void pmap_kremove_zoned(vm_offset_t va);
 static void pmap_kremove_device_zoned(vm_offset_t sva, vm_size_t size);
 static bool pmap_page_is_mapped_zoned(vm_page_t m);
-static int pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels);
+static int pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels, bool secure_process);
 static bool pmap_ps_enabled_zoned(pmap_t pmap __unused);
 static uint64_t pmap_to_ttbr0_zoned(pmap_t pmap);
 static void * pmap_mapbios_zoned(vm_paddr_t pa, vm_size_t size);
@@ -433,7 +433,7 @@ static void pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t
 static boolean_t pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m);
 static void pmap_page_init_zoned(vm_page_t m);
 static int pmap_page_wired_mappings_zoned(vm_page_t m);
-static int pmap_pinit_zoned(pmap_t pmap);
+static int pmap_pinit_zoned(pmap_t pmap, bool secure_process);
 static void pmap_pinit0_zoned(pmap_t pmap);
 static void pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot);
 static void pmap_qenter_zoned(vm_offset_t sva, vm_page_t * ma, int count);
@@ -1838,14 +1838,17 @@ pmap_pinit0_zoned(pmap_t pmap)
 }
 
 static int
-pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
+pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels, bool secure_process) 
 {
+	pmap->secure_process = secure_process;
+
 	vm_page_t m;
 
 	/*
 	 * allocate the l0 page
 	 */
-	m = pmap_secure_vm_page();
+	m = vm_page_alloc_noobj(VM_ALLOC_WAITOK | VM_ALLOC_WIRED |
+	    VM_ALLOC_ZERO);
 	pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
 	pmap->pm_l0 = (pd_entry_t *)PHYS_TO_DMAP(pmap->pm_l0_paddr);
 
@@ -1887,10 +1890,10 @@ pmap_pinit_stage_zoned(pmap_t pmap, enum pmap_stage stage, int levels)
 }
 
 static int
-pmap_pinit_zoned(pmap_t pmap)
+pmap_pinit_zoned(pmap_t pmap, bool secure_process)
 {
 
-	return (pmap_pinit_stage_zoned(pmap, PM_STAGE1, 4));
+	return (pmap_pinit_stage_zoned(pmap, PM_STAGE1, 4, secure_process));
 }
 
 /*
@@ -1914,7 +1917,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 	/*
 	 * Allocate a page table page.
 	 */
-	if ((m = pmap_secure_vm_page()) == NULL) {
+	if ((m = vm_page_alloc_noobj(VM_ALLOC_WIRED | VM_ALLOC_ZERO)) == NULL) {
 		if (lockp != NULL) {
 			RELEASE_PV_LIST_LOCK(lockp);
 			PMAP_UNLOCK(pmap);
@@ -2388,7 +2391,7 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 	pc_marker = (struct pv_chunk *)&pc_marker_b;
 	pc_marker_end = (struct pv_chunk *)&pc_marker_end_b;
 
-	mtx_lock_spin(&pv_chunks_mutex);
+	mtx_lock(&pv_chunks_mutex);
 	active_reclaims++;
 	TAILQ_INSERT_HEAD(&pv_chunks, pc_marker, pc_lru);
 	TAILQ_INSERT_TAIL(&pv_chunks, pc_marker_end, pc_lru);
@@ -2404,7 +2407,7 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 			 */
 			goto next_chunk;
 		}
-		mtx_unlock_spin(&pv_chunks_mutex);
+		mtx_unlock(&pv_chunks_mutex);
 
 		/*
 		 * A pv_chunk can only be removed from the pc_lru list
@@ -2419,15 +2422,15 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 			if (pmap > locked_pmap) {
 				RELEASE_PV_LIST_LOCK(lockp);
 				PMAP_LOCK(pmap);
-				mtx_lock_spin(&pv_chunks_mutex);
+				mtx_lock(&pv_chunks_mutex);
 				continue;
 			} else if (pmap != locked_pmap) {
 				if (PMAP_TRYLOCK(pmap)) {
-					mtx_lock_spin(&pv_chunks_mutex);
+					mtx_lock(&pv_chunks_mutex);
 					continue;
 				} else {
 					pmap = NULL; /* pmap is not locked */
-					mtx_lock_spin(&pv_chunks_mutex);
+					mtx_lock(&pv_chunks_mutex);
 					pc = TAILQ_NEXT(pc_marker, pc_lru);
 					if (pc == NULL ||
 					    pc->pc_pmap != next_pmap)
@@ -2479,7 +2482,7 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 			}
 		}
 		if (freed == 0) {
-			mtx_lock_spin(&pv_chunks_mutex);
+			mtx_lock(&pv_chunks_mutex);
 			goto next_chunk;
 		}
 		/* Every freed mapping is for a 4 KB page. */
@@ -2496,12 +2499,12 @@ reclaim_pv_chunk(pmap_t locked_pmap, struct rwlock **lockp)
 			/* Entire chunk is free; return it. */
 			m_pc = PHYS_TO_VM_PAGE(DMAP_TO_PHYS((vm_offset_t)pc));
 			dump_drop_page(m_pc->phys_addr);
-			mtx_lock_spin(&pv_chunks_mutex);
+			mtx_lock(&pv_chunks_mutex);
 			TAILQ_REMOVE(&pv_chunks, pc, pc_lru);
 			break;
 		}
 		TAILQ_INSERT_HEAD(&pmap->pm_pvchunk, pc, pc_list);
-		mtx_lock_spin(&pv_chunks_mutex);
+		mtx_lock(&pv_chunks_mutex);
 		/* One freed pv entry in locked_pmap is sufficient. */
 		if (pmap == locked_pmap)
 			break;
@@ -2527,7 +2530,7 @@ next_chunk:
 	TAILQ_REMOVE(&pv_chunks, pc_marker, pc_lru);
 	TAILQ_REMOVE(&pv_chunks, pc_marker_end, pc_lru);
 	active_reclaims--;
-	mtx_unlock_spin(&pv_chunks_mutex);
+	mtx_unlock(&pv_chunks_mutex);
 	if (pmap != NULL && pmap != locked_pmap)
 		PMAP_UNLOCK(pmap);
 	if (m_pc == NULL && !SLIST_EMPTY(&free)) {
@@ -2576,9 +2579,9 @@ free_pv_chunk(struct pv_chunk *pc)
 {
 	vm_page_t m;
 
-	mtx_lock_spin(&pv_chunks_mutex);
+	mtx_lock(&pv_chunks_mutex);
  	TAILQ_REMOVE(&pv_chunks, pc, pc_lru);
-	mtx_unlock_spin(&pv_chunks_mutex);
+	mtx_unlock(&pv_chunks_mutex);
 	PV_STAT(atomic_subtract_int(&pv_entry_spare, _NPCPV));
 	PV_STAT(atomic_subtract_int(&pc_chunk_count, 1));
 	PV_STAT(atomic_add_int(&pc_chunk_frees, 1));
@@ -2632,7 +2635,7 @@ retry:
 		}
 	}
 	/* No free items, allocate another chunk */
-	m = pmap_secure_vm_page();
+	m = vm_page_alloc_noobj(VM_ALLOC_WIRED);
 	if (m == NULL) {
 		if (lockp == NULL) {
 			PV_STAT(pc_chunk_tryfail++);
@@ -2650,9 +2653,9 @@ retry:
 	pc->pc_map[0] = PC_FREE0 & ~1ul;	/* preallocated bit 0 */
 	pc->pc_map[1] = PC_FREE1;
 	pc->pc_map[2] = PC_FREE2;
-	mtx_lock_spin(&pv_chunks_mutex);
+	mtx_lock(&pv_chunks_mutex);
 	TAILQ_INSERT_TAIL(&pv_chunks, pc, pc_lru);
-	mtx_unlock_spin(&pv_chunks_mutex);
+	mtx_unlock(&pv_chunks_mutex);
 	pv = &pc->pc_pventry[0];
 	TAILQ_INSERT_HEAD(&pmap->pm_pvchunk, pc, pc_list);
 	PV_STAT(atomic_add_long(&pv_entry_count, 1));
@@ -2697,7 +2700,7 @@ retry:
 			break;
 	}
 	for (reclaimed = false; avail < needed; avail += _NPCPV) {
-		m = pmap_secure_vm_page();
+		m = vm_page_alloc_noobj(VM_ALLOC_WIRED);
 		if (m == NULL) {
 			m = reclaim_pv_chunk(pmap, lockp);
 			if (m == NULL)
@@ -2725,9 +2728,9 @@ retry:
 			goto retry;
 	}
 	if (!TAILQ_EMPTY(&new_tail)) {
-		mtx_lock_spin(&pv_chunks_mutex);
+		mtx_lock(&pv_chunks_mutex);
 		TAILQ_CONCAT(&pv_chunks, &new_tail, pc_lru);
-		mtx_unlock_spin(&pv_chunks_mutex);
+		mtx_unlock(&pv_chunks_mutex);
 	}
 }
 
@@ -3073,7 +3076,7 @@ pmap_remove_l3_range(pmap_t pmap, pd_entry_t l2e, vm_offset_t sva,
 					rw_wunlock(*lockp);
 				}
 				*lockp = new_lock;
-				rw_wlock_spin(*lockp);
+				rw_wlock(*lockp);
 			}
 			pmap_pvh_free(&m->md, pmap, sva);
 			if (TAILQ_EMPTY(&m->md.pv_list) &&
@@ -3230,7 +3233,7 @@ pmap_remove_all_zoned(vm_page_t m)
 	SLIST_INIT(&free);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
-	rw_wlock_spin(lock);
+	rw_wlock(lock);
 retry:
 	while ((pv = TAILQ_FIRST(&pvh->pv_list)) != NULL) {
 		pmap = PV_PMAP(pv);
@@ -3238,7 +3241,7 @@ retry:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock_spin(lock);
+			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -3261,7 +3264,7 @@ retry:
 			md_gen = m->md.pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock_spin(lock);
+			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen || md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -3327,7 +3330,7 @@ pmap_protect_l2(pmap_t pmap, pt_entry_t *l2, vm_offset_t sva, pt_entry_t mask,
 		return;
 
 	while (!atomic_fcmpset_64(l2, &old_l2, (old_l2 & ~mask) | nbits))
-		;
+		cpu_spinwait();
 
 	/*
 	 * When a dirty read/write superpage mapping is write protected,
@@ -3452,7 +3455,7 @@ pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot
 
 			while (!atomic_fcmpset_64(l3p, &l3, (l3 & ~mask) |
 			    nbits))
-				;
+				cpu_spinwait();
 
 			/*
 			 * When a dirty read/write mapping is write protected,
@@ -4279,6 +4282,8 @@ validate:
 out:
 	if (lock != NULL)
 		rw_wunlock(lock);
+	if (pmap->secure_process)
+		pmap_kremove_zoned(PHYS_TO_DMAP(pa));
 	PMAP_UNLOCK(pmap);
 	return (rv);
 }
@@ -4549,6 +4554,8 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 	 * resident, we are creating it here.
 	 */
 	if (!ADDR_IS_KERNEL(va)) {
+		if (pmap->secure_process)
+			pmap_kremove_zoned(PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m)));
 		vm_pindex_t l2pindex;
 
 		/*
@@ -5065,7 +5072,7 @@ pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m)
 	    ("pmap_page_exists_quick: page %p is not managed", m));
 	rv = FALSE;
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_rlock_spin(lock);
+	rw_rlock(lock);
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_next) {
 		if (PV_PMAP(pv) == pmap) {
 			rv = TRUE;
@@ -5110,7 +5117,7 @@ pmap_page_wired_mappings_zoned(vm_page_t m)
 	if ((m->oflags & VPO_UNMANAGED) != 0)
 		return (0);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_rlock_spin(lock);
+	rw_rlock(lock);
 restart:
 	count = 0;
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_next) {
@@ -5119,7 +5126,7 @@ restart:
 			md_gen = m->md.pv_gen;
 			rw_runlock(lock);
 			PMAP_LOCK(pmap);
-			rw_rlock_spin(lock);
+			rw_rlock(lock);
 			if (md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto restart;
@@ -5139,7 +5146,7 @@ restart:
 				pvh_gen = pvh->pv_gen;
 				rw_runlock(lock);
 				PMAP_LOCK(pmap);
-				rw_rlock_spin(lock);
+				rw_rlock(lock);
 				if (md_gen != m->md.pv_gen ||
 				    pvh_gen != pvh->pv_gen) {
 					PMAP_UNLOCK(pmap);
@@ -5170,7 +5177,7 @@ pmap_page_is_mapped_zoned(vm_page_t m)
 	if ((m->oflags & VPO_UNMANAGED) != 0)
 		return (false);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_rlock_spin(lock);
+	rw_rlock(lock);
 	rv = !TAILQ_EMPTY(&m->md.pv_list) ||
 	    ((m->flags & PG_FICTITIOUS) == 0 &&
 	    !TAILQ_EMPTY(&page_to_pvh(m)->pv_list));
@@ -5378,7 +5385,7 @@ pmap_page_test_mappings(vm_page_t m, boolean_t accessed, boolean_t modified)
 
 	rv = FALSE;
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_rlock_spin(lock);
+	rw_rlock(lock);
 restart:
 	TAILQ_FOREACH(pv, &m->md.pv_list, pv_next) {
 		pmap = PV_PMAP(pv);
@@ -5387,7 +5394,7 @@ restart:
 			md_gen = m->md.pv_gen;
 			rw_runlock(lock);
 			PMAP_LOCK(pmap);
-			rw_rlock_spin(lock);
+			rw_rlock(lock);
 			if (md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto restart;
@@ -5421,7 +5428,7 @@ restart:
 				pvh_gen = pvh->pv_gen;
 				rw_runlock(lock);
 				PMAP_LOCK(pmap);
-				rw_rlock_spin(lock);
+				rw_rlock(lock);
 				if (md_gen != m->md.pv_gen ||
 				    pvh_gen != pvh->pv_gen) {
 					PMAP_UNLOCK(pmap);
@@ -5533,7 +5540,7 @@ pmap_remove_write_zoned(vm_page_t m)
 		return;
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
-	rw_wlock_spin(lock);
+	rw_wlock(lock);
 retry:
 	TAILQ_FOREACH_SAFE(pv, &pvh->pv_list, pv_next, next_pv) {
 		pmap = PV_PMAP(pv);
@@ -5542,7 +5549,7 @@ retry:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock_spin(lock);
+			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -5565,7 +5572,7 @@ retry:
 			md_gen = m->md.pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock_spin(lock);
+			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen ||
 			    md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
@@ -5577,7 +5584,7 @@ retry:
 		if ((oldpte & ATTR_SW_DBM) != 0) {
 			while (!atomic_fcmpset_64(pte, &oldpte,
 			    (oldpte | ATTR_S1_AP_RW_BIT) & ~ATTR_SW_DBM))
-				;
+				cpu_spinwait();
 			if ((oldpte & ATTR_S1_AP_RW_BIT) ==
 			    ATTR_S1_AP(ATTR_S1_AP_RW))
 				vm_page_dirty(m);
@@ -5626,7 +5633,7 @@ pmap_ts_referenced_zoned(vm_page_t m)
 	pa = VM_PAGE_TO_PHYS(m);
 	lock = PHYS_TO_PV_LIST_LOCK(pa);
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
-	rw_wlock_spin(lock);
+	rw_wlock(lock);
 retry:
 	not_cleared = 0;
 	if ((pvf = TAILQ_FIRST(&pvh->pv_list)) == NULL)
@@ -5640,7 +5647,7 @@ retry:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock_spin(lock);
+			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -5716,7 +5723,7 @@ small_mappings:
 			md_gen = m->md.pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock_spin(lock);
+			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen || md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto retry;
@@ -5869,7 +5876,7 @@ pmap_advise_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, int advice)
 				while (!atomic_fcmpset_long(l3, &oldl3,
 				    (oldl3 & ~ATTR_AF) |
 				    ATTR_S1_AP(ATTR_S1_AP_RO)))
-					;
+					cpu_spinwait();
 			} else if ((oldl3 & ATTR_AF) != 0)
 				pmap_clear_bits(l3, ATTR_AF);
 			else
@@ -5912,7 +5919,7 @@ pmap_clear_modify_zoned(vm_page_t m)
 		return;
 	pvh = (m->flags & PG_FICTITIOUS) != 0 ? &pv_dummy : page_to_pvh(m);
 	lock = VM_PAGE_TO_PV_LIST_LOCK(m);
-	rw_wlock_spin(lock);
+	rw_wlock(lock);
 restart:
 	TAILQ_FOREACH_SAFE(pv, &pvh->pv_list, pv_next, next_pv) {
 		pmap = PV_PMAP(pv);
@@ -5921,7 +5928,7 @@ restart:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock_spin(lock);
+			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto restart;
@@ -5943,7 +5950,7 @@ restart:
 			oldl3 = pmap_load(l3);
 			while (!atomic_fcmpset_long(l3, &oldl3,
 			    (oldl3 & ~ATTR_SW_DBM) | ATTR_S1_AP(ATTR_S1_AP_RO)))
-				;
+				cpu_spinwait();
 			vm_page_dirty(m);
 			pmap_invalidate_page(pmap, va);
 		}
@@ -5957,7 +5964,7 @@ restart:
 			pvh_gen = pvh->pv_gen;
 			rw_wunlock(lock);
 			PMAP_LOCK(pmap);
-			rw_wlock_spin(lock);
+			rw_wlock(lock);
 			if (pvh_gen != pvh->pv_gen || md_gen != m->md.pv_gen) {
 				PMAP_UNLOCK(pmap);
 				goto restart;
@@ -6394,7 +6401,7 @@ pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va)
 			return (NULL);
 	}
 
-	if ((ml2 = pmap_secure_vm_page()) ==
+	if ((ml2 = vm_page_alloc_noobj(VM_ALLOC_INTERRUPT | VM_ALLOC_WIRED)) ==
 	    NULL) {
 		CTR2(KTR_PMAP, "pmap_demote_l1: failure for va %#lx"
 		    " in pmap %p", va, pmap);
@@ -6528,7 +6535,9 @@ pmap_demote_l2_locked(pmap_t pmap, pt_entry_t *l2, vm_offset_t va,
 		 * priority (VM_ALLOC_INTERRUPT).  Otherwise, the
 		 * priority is normal.
 		 */
-		ml3 = pmap_secure_vm_page();
+		ml3 = vm_page_alloc_noobj(
+		    (VIRT_IN_DMAP(va) ? VM_ALLOC_INTERRUPT : 0) |
+		    VM_ALLOC_WIRED);
 
 		/*
 		 * If the allocation of the new page table page fails,
@@ -7587,7 +7596,7 @@ pmap_dispatch(void* call_uncasted)
 		case pmap_page_is_mapped_enum:
 			return (uint64_t) pmap_page_is_mapped_zoned((vm_page_t) call->args[0]);
 		case pmap_pinit_stage_enum:
-			return (uint64_t) pmap_pinit_stage_zoned((pmap_t) call->args[0], (enum pmap_stage) call->args[1], (int) call->args[2]);
+			return (uint64_t) pmap_pinit_stage_zoned((pmap_t) call->args[0], (enum pmap_stage) call->args[1], (int) call->args[2], (bool) call->args[3]);
 		case pmap_ps_enabled_enum:
 			return (uint64_t) pmap_ps_enabled_zoned((pmap_t) call->args[0]);
 		case pmap_to_ttbr0_enum:
@@ -7677,7 +7686,7 @@ pmap_dispatch(void* call_uncasted)
 		case pmap_page_wired_mappings_enum:
 			return (uint64_t) pmap_page_wired_mappings_zoned((vm_page_t) call->args[0]);
 		case pmap_pinit_enum:
-			return (uint64_t) pmap_pinit_zoned((pmap_t) call->args[0]);
+			return (uint64_t) pmap_pinit_zoned((pmap_t) call->args[0], (bool) call->args[1]);
 		case pmap_pinit0_enum:
 			pmap_pinit0_zoned((pmap_t) call->args[0]);
 			return 0;
@@ -7824,9 +7833,9 @@ pmap_page_is_mapped(vm_page_t m)
 }
 
 int
-pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
+pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels, bool secure_process)
 {
-	uint64_t args[] = {(uint64_t) pmap, (uint64_t) stage, (uint64_t) levels};
+	uint64_t args[] = {(uint64_t) pmap, (uint64_t) stage, (uint64_t) levels, (uint64_t) secure_process};
 	struct pmap_call call = {pmap_pinit_stage_enum, args};
 	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
@@ -8120,9 +8129,9 @@ pmap_page_wired_mappings(vm_page_t m)
 }
 
 int
-pmap_pinit(pmap_t pmap)
+pmap_pinit(pmap_t pmap, bool secure_process)
 {
-	uint64_t args[] = {(uint64_t) pmap};
+	uint64_t args[] = {(uint64_t) pmap, (uint64_t) secure_process};
 	struct pmap_call call = {pmap_pinit_enum, args};
 	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }

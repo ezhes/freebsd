@@ -15,7 +15,7 @@ publics = 'void pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma);\
     void	pmap_kremove_device(vm_offset_t, vm_size_t);\
     void	*pmap_mapdev_attr(vm_offset_t pa, vm_size_t size, vm_memattr_t ma);\
     bool	pmap_page_is_mapped(vm_page_t m);\
-    int	pmap_pinit_stage(pmap_t, enum pmap_stage, int);\
+    int	pmap_pinit_stage(pmap_t pmap, enum pmap_stage, int, bool secure_process);\
     bool	pmap_ps_enabled(pmap_t pmap);\
     uint64_t pmap_to_ttbr0(pmap_t pmap);\
     \
@@ -61,7 +61,7 @@ publics = 'void pmap_page_set_memattr(vm_page_t m, vm_memattr_t ma);\
     boolean_t	 pmap_page_exists_quick(pmap_t pmap, vm_page_t m);\
     void		 pmap_page_init(vm_page_t m);\
     int		 pmap_page_wired_mappings(vm_page_t m);\
-    int		 pmap_pinit(pmap_t);\
+    int		 pmap_pinit(pmap_t, bool secure_process);\
     void		 pmap_pinit0(pmap_t);\
     void		 pmap_protect(pmap_t, vm_offset_t, vm_offset_t, vm_prot_t);\
     void		 pmap_qenter(vm_offset_t, vm_page_t *, int);\
@@ -394,11 +394,13 @@ if __name__ == "__main__":
         skipped_cmt += skipped_cmt_of(skip)
     skipped_cmt += '\n'
 
-    pmapc_replaces = [('mtx_lock(', 'mtx_lock_spin('),
-        ('mtx_unlock(', 'mtx_unlock_spin('),
-        ('rw_wlock(', 'rw_wlock_spin('),
-        ('rw_rlock(', 'rw_rlock_spin('),
-        ('cpu_spinwait();', ';')]
+    pmapc_replaces = [
+        # ('mtx_lock(', 'mtx_lock_spin('),
+        # ('mtx_unlock(', 'mtx_unlock_spin('),
+        # ('rw_wlock(', 'rw_wlock_spin('),
+        # ('rw_rlock(', 'rw_rlock_spin('),
+        # ('cpu_spinwait();', ';')
+    ]
 
     for old, new in pmapc_replaces:
         pmapc = pmapc.replace(old, new)
@@ -432,8 +434,8 @@ if __name__ == "__main__":
             ('vmem_alloc(',
                 lambda call: '0;\n\t\t\t/*' + call + '*/\n\t\t\tpanic("pmap_map_io_transient_zoned: this should never have been called")'),
             # NOTE: pmap_grow_kernel_zoned is bypassed because kmem_init causes pmap_grow_kernel_zoned and smh_init can't work before kmem_init
-            ('vm_page_alloc_noobj(',
-                lambda _call: secure_page_alloc_call),
+            # ('vm_page_alloc_noobj(',
+            #     lambda _call: secure_page_alloc_call),
             ]
         lines = pmapc.split('\n')
         for idx in range(len(lines)):
@@ -538,9 +540,10 @@ if __name__ == "__main__":
     with open(pmaph_backup, 'r') as pmaph:
         pmaph = pmaph.read()
     
-    pmaph_replaces = [('mtx_lock(', 'mtx_lock_spin('),
-        ('mtx_unlock(', 'mtx_unlock_spin('),
-        ]
+    pmaph_replaces = [
+        # ('mtx_lock(', 'mtx_lock_spin('),
+        # ('mtx_unlock(', 'mtx_unlock_spin('),
+    ]
     for old, new in pmaph_replaces:
         pmaph = pmaph.replace(old, new)
 

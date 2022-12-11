@@ -1764,8 +1764,10 @@ pmap_pinit0(pmap_t pmap)
 }
 
 int
-pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
+pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels, bool secure_process) 
 {
+	pmap->secure_process = secure_process;
+
 	vm_page_t m;
 
 	/*
@@ -1814,10 +1816,10 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 }
 
 int
-pmap_pinit(pmap_t pmap)
+pmap_pinit(pmap_t pmap, bool secure_process)
 {
 
-	return (pmap_pinit_stage(pmap, PM_STAGE1, 4));
+	return (pmap_pinit_stage(pmap, PM_STAGE1, 4, secure_process));
 }
 
 /*
@@ -4206,6 +4208,8 @@ validate:
 out:
 	if (lock != NULL)
 		rw_wunlock(lock);
+	if (pmap->secure_process)
+		pmap_kremove(PHYS_TO_DMAP(pa));
 	PMAP_UNLOCK(pmap);
 	return (rv);
 }
@@ -4476,6 +4480,8 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 	 * resident, we are creating it here.
 	 */
 	if (!ADDR_IS_KERNEL(va)) {
+		if (pmap->secure_process)
+			pmap_kremove(PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m)));
 		vm_pindex_t l2pindex;
 
 		/*
