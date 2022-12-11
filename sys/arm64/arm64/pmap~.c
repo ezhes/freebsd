@@ -4212,6 +4212,7 @@ out:
 		rw_wunlock(lock);
 	PMAP_UNLOCK(pmap);
 	return (rv);
+pmap_kremove(va);
 }
 
 /*
@@ -4433,6 +4434,7 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 	if (lock != NULL)
 		rw_wunlock(lock);
 	PMAP_UNLOCK(pmap);
+	pmap_kremove(start);
 }
 
 /*
@@ -4455,6 +4457,7 @@ pmap_enter_quick(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot)
 	if (lock != NULL)
 		rw_wunlock(lock);
 	PMAP_UNLOCK(pmap);
+	pmap_kremove(va);
 }
 
 static vm_page_t
