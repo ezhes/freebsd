@@ -395,7 +395,7 @@ vm_paddr_t pmap_kextract_zoned(vm_offset_t va);
 void pmap_kremove_zoned(vm_offset_t va);
 void pmap_kremove_device_zoned(vm_offset_t sva, vm_size_t size);
 bool pmap_page_is_mapped_zoned(vm_page_t m);
-int pmap_pinit_stage_zoned(pmap_t * pmap, enum pmap_stage stage, int levels);
+int pmap_pinit_stage_zoned(pmap_t * pmap, enum pmap_stage stage, int levels, bool secure_process);
 bool pmap_ps_enabled_zoned(pmap_t pmap __unused);
 uint64_t pmap_to_ttbr0_zoned(pmap_t pmap);
 void * pmap_mapbios_zoned(vm_paddr_t pa, vm_size_t size);
@@ -432,7 +432,7 @@ void pmap_object_init_pt_zoned(pmap_t pmap, vm_offset_t addr, vm_object_t object
 boolean_t pmap_page_exists_quick_zoned(pmap_t pmap, vm_page_t m);
 void pmap_page_init_zoned(vm_page_t m);
 int pmap_page_wired_mappings_zoned(vm_page_t m);
-int pmap_pinit_zoned(pmap_t * pmap);
+int pmap_pinit_zoned(pmap_t * pmap, bool secure_process);
 void pmap_pinit0_zoned(pmap_t pmap);
 void pmap_protect_zoned(pmap_t pmap, vm_offset_t sva, vm_offset_t eva, vm_prot_t prot);
 void pmap_qenter_zoned(vm_offset_t sva, vm_page_t * ma, int count);
@@ -1837,9 +1837,10 @@ pmap_pinit0_zoned(pmap_t pmap)
 }
 
 int
-pmap_pinit_stage_zoned(pmap_t *pmap, enum pmap_stage stage, int levels) 
+pmap_pinit_stage_zoned(pmap_t *pmap, enum pmap_stage stage, int levels, bool secure_process) 
 {
 	*pmap = smh_malloc(&pmap_heap, sizeof(struct pmap)); 
+	(*pmap)->secure_process = secure_process;
 
 	vm_page_t m;
 
@@ -1890,10 +1891,10 @@ pmap_pinit_stage_zoned(pmap_t *pmap, enum pmap_stage stage, int levels)
 }
 
 int
-pmap_pinit_zoned(pmap_t *pmap)
+pmap_pinit_zoned(pmap_t *pmap, bool secure_process)
 {
 
-	return (pmap_pinit_stage_zoned(pmap, PM_STAGE1, 4));
+	return (pmap_pinit_stage_zoned(pmap, PM_STAGE1, 4, secure_process));
 }
 
 /*
@@ -7576,7 +7577,7 @@ pmap_dispatch(void* call_uncasted)
 		case pmap_page_is_mapped_enum:
 			return (uint64_t) pmap_page_is_mapped_zoned((vm_page_t) call->args[0]);
 		case pmap_pinit_stage_enum:
-			return (uint64_t) pmap_pinit_stage_zoned((pmap_t *) call->args[0], (enum pmap_stage) call->args[1], (int) call->args[2]);
+			return (uint64_t) pmap_pinit_stage_zoned((pmap_t *) call->args[0], (enum pmap_stage) call->args[1], (int) call->args[2], (bool) call->args[3]);
 		case pmap_ps_enabled_enum:
 			return (uint64_t) pmap_ps_enabled_zoned((pmap_t) call->args[0]);
 		case pmap_to_ttbr0_enum:
@@ -7666,7 +7667,7 @@ pmap_dispatch(void* call_uncasted)
 		case pmap_page_wired_mappings_enum:
 			return (uint64_t) pmap_page_wired_mappings_zoned((vm_page_t) call->args[0]);
 		case pmap_pinit_enum:
-			return (uint64_t) pmap_pinit_zoned((pmap_t *) call->args[0]);
+			return (uint64_t) pmap_pinit_zoned((pmap_t *) call->args[0], (bool) call->args[1]);
 		case pmap_pinit0_enum:
 			pmap_pinit0_zoned((pmap_t) call->args[0]);
 			return 0;
@@ -7813,9 +7814,9 @@ pmap_page_is_mapped(vm_page_t m)
 }
 
 int
-pmap_pinit_stage(pmap_t * pmap, enum pmap_stage stage, int levels)
+pmap_pinit_stage(pmap_t * pmap, enum pmap_stage stage, int levels, bool secure_process)
 {
-	uint64_t args[] = {(uint64_t) pmap, (uint64_t) stage, (uint64_t) levels};
+	uint64_t args[] = {(uint64_t) pmap, (uint64_t) stage, (uint64_t) levels, (uint64_t) secure_process};
 	struct pmap_call call = {pmap_pinit_stage_enum, args};
 	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }
@@ -8109,9 +8110,9 @@ pmap_page_wired_mappings(vm_page_t m)
 }
 
 int
-pmap_pinit(pmap_t * pmap)
+pmap_pinit(pmap_t * pmap, bool secure_process)
 {
-	uint64_t args[] = {(uint64_t) pmap};
+	uint64_t args[] = {(uint64_t) pmap, (uint64_t) secure_process};
 	struct pmap_call call = {pmap_pinit_enum, args};
 	return (int) zm_zone_enter(ZONE_STATE_PMAP, (void *) &call);
 }

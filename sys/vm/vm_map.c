@@ -328,7 +328,7 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_tt pinit)
 
 	vm = uma_zalloc(vmspace_zone, M_WAITOK);
 	KASSERT(vm->vm_map.pmap == NULL, ("vm_map.pmap must be NULL"));
-	if (!pinit(vmspace_pmap_t(vm))) {
+	if (!pinit(vmspace_pmap_t(vm), false)) {
 		uma_zfree(vmspace_zone, vm);
 		return (NULL);
 	}

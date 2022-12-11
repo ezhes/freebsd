@@ -1764,9 +1764,10 @@ pmap_pinit0(pmap_t pmap)
 }
 
 int
-pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels) 
+pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels, bool secure_process) 
 {
 	*pmap = smh_malloc(&pmap_heap, sizeof(struct pmap)); 
+	(*pmap)->secure_process = secure_process;
 
 	vm_page_t m;
 
@@ -1817,10 +1818,10 @@ pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels)
 }
 
 int
-pmap_pinit(pmap_t *pmap)
+pmap_pinit(pmap_t *pmap, bool secure_process)
 {
 
-	return (pmap_pinit_stage(pmap, PM_STAGE1, 4));
+	return (pmap_pinit_stage(pmap, PM_STAGE1, 4, secure_process));
 }
 
 /*

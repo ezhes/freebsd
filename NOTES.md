@@ -61,6 +61,17 @@ So, problem discovered and problem solved lol.
 
 @Zoey Mengzhu Sun and you need to write the black shims and the pmap_zone_dispatch stuff. I'll provide the glue that gets you from zone_enter to dispatch, but y'all need to a) do the plumbing for this and b) figure out a way to allocate all page table data into a single contiguous section of virtual memory. Right now a lot of the operations are probably going through the physmap (a region which is just all of physical memory mapped into virtual memory) but we intend to make the pmap owned pages read-only in the physmap to prevent them from being tampered through it
 
+find the exec syscall, and to every function all the way through to pmap_pinit, add a boolean for secure process to the args
+
+inside struct pmap, add a secure process boolean
+
+inside pmap_pinit, set the thing to true based on fn arg
+
+inside the following functions, add a line to pmap_kremove the physical addresses (use pmap_kextract to get kernel-space va if needed):
+pmap_enter
+pmap_enter_quick
+pmap_enter_object
+
 ## Useful files
 
 pmap
