@@ -384,11 +384,13 @@ static void	pmap_pvh_free(struct md_page *pvh, pmap_t pmap, vm_offset_t va);
 static pv_entry_t pmap_pvh_remove(struct md_page *pvh, pmap_t pmap,
 		    vm_offset_t va);
 
+static __inline void pmap_secure_user(pmap_t pmap, vm_paddr_t pa);
+static __inline void pmap_undo_secure_user(pmap_t pmap, vm_paddr_t pa, vm_size_t size);
 static void pmap_abort_ptp(pmap_t pmap, vm_offset_t va, vm_page_t mpte);
 static bool pmap_activate_int(pmap_t pmap);
 static void pmap_alloc_asid(pmap_t pmap);
 static int pmap_change_props_locked(vm_offset_t va, vm_size_t size,
-    vm_prot_t prot, int mode, bool skip_unmapped);
+    vm_prot_t prot, int mode, bool skip_unmapped, bool override_dmap_write);
 static pt_entry_t *pmap_demote_l1(pmap_t pmap, pt_entry_t *l1, vm_offset_t va);
 static pt_entry_t *pmap_demote_l2_locked(pmap_t pmap, pt_entry_t *l2,
     vm_offset_t va, struct rwlock **lockp);
@@ -429,6 +431,32 @@ static __inline vm_page_t pmap_remove_pt_page(pmap_t pmap, vm_offset_t va);
 /********************/
 /* Inline functions */
 /********************/
+
+static __inline void
+pmap_secure_user(pmap_t pmap, vm_paddr_t pa)
+{
+	if (pmap->secure_process) {
+		va = PHYS_TO_DMAP(pa);
+		if (va >= VM_MIN_KERNEL_ADDRESS) {
+			PMAP_LOCK(kernel_pmap);
+			pmap_change_props_locked(va, PAGE_SIZE, VM_PROT_READ, -1, false, true);
+			PMAP_UNLOCK(kernel_pmap);
+			// pmap_kremove_zoned(PHYS_TO_DMAP(pa));
+		}
+	}
+}
+
+static __inline void pmap_undo_secure_user(pmap_t pmap, vm_paddr_t pa, vm_size_t size)
+{
+	if (pmap->secure_process) {
+		va = PHYS_TO_DMAP(pa);
+		if (va >= VM_MIN_KERNEL_ADDRESS) {
+			PMAP_LOCK(kernel_pmap);
+			pmap_change_props_locked(va, size, VM_PROT_ALL, -1, false, true);
+			PMAP_UNLOCK(kernel_pmap);
+		}
+	}
+}
 
 static __inline void
 pagecopy(void *s, void *d)
@@ -1189,6 +1217,8 @@ pmap_invalidate_page(pmap_t pmap, vm_offset_t va)
 	uint64_t r;
 
 	PMAP_ASSERT_STAGE1(pmap);
+
+	pmap_undo_secure_user(pmap, va, PAGE_SIZE);
 
 	dsb(ishst);
 	r = TLBI_VA(va);
@@ -4208,9 +4238,8 @@ validate:
 out:
 	if (lock != NULL)
 		rw_wunlock(lock);
-	if (pmap->secure_process)
-		pmap_kremove(PHYS_TO_DMAP(pa));
 	PMAP_UNLOCK(pmap);
+	pmap_secure_user(pmap, pa);
 	return (rv);
 }
 
@@ -4480,8 +4509,6 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 	 * resident, we are creating it here.
 	 */
 	if (!ADDR_IS_KERNEL(va)) {
-		if (pmap->secure_process)
-			pmap_kremove(PHYS_TO_DMAP(VM_PAGE_TO_PHYS(m)));
 		vm_pindex_t l2pindex;
 
 		/*
@@ -4587,6 +4614,7 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 
 	pmap_store(l3, l3_val);
 	dsb(ishst);
+	pmap_secure_user(pmap, pa);
 
 	return (mpte);
 }
@@ -6126,7 +6154,7 @@ pmap_change_attr(vm_offset_t va, vm_size_t size, int mode)
 	int error;
 
 	PMAP_LOCK(kernel_pmap);
-	error = pmap_change_props_locked(va, size, PROT_NONE, mode, false);
+	error = pmap_change_props_locked(va, size, PROT_NONE, mode, false, false);
 	PMAP_UNLOCK(kernel_pmap);
 	return (error);
 }
@@ -6148,14 +6176,14 @@ pmap_change_prot(vm_offset_t va, vm_size_t size, vm_prot_t prot)
 		return (EINVAL);
 
 	PMAP_LOCK(kernel_pmap);
-	error = pmap_change_props_locked(va, size, prot, -1, false);
+	error = pmap_change_props_locked(va, size, prot, -1, false, false);
 	PMAP_UNLOCK(kernel_pmap);
 	return (error);
 }
 
 static int
 pmap_change_props_locked(vm_offset_t va, vm_size_t size, vm_prot_t prot,
-    int mode, bool skip_unmapped)
+    int mode, bool skip_unmapped, bool override_dmap_write)
 {
 	vm_offset_t base, offset, tmpva;
 	vm_size_t pte_size;
@@ -6192,7 +6220,9 @@ pmap_change_props_locked(vm_offset_t va, vm_size_t size, vm_prot_t prot,
 			 * on this in ddb & dtrace to insert breakpoint
 			 * instructions.
 			 */
-			prot |= VM_PROT_WRITE;
+			if (!override_dmap_write) {
+				prot |= VM_PROT_WRITE;
+			}
 		}
 
 		if ((prot & VM_PROT_WRITE) == 0) {
@@ -6281,7 +6311,7 @@ pmap_change_props_locked(vm_offset_t va, vm_size_t size, vm_prot_t prot,
 				 */
 				rv = pmap_change_props_locked(
 				    PHYS_TO_DMAP(pa), pte_size,
-				    prot, mode, true);
+				    prot, mode, true, false);
 				if (rv != 0)
 					return (rv);
 			}

@@ -472,10 +472,56 @@ int main() {
 	while (fib(10) == 55) {
 		; // currently even this immediately crashes
 	}
-	if (false) { // correct execution
+	if (0) { // correct execution
 		int result = *ptr;
 	}
   // else, syscall
 	return 0;
+}
+```
+
+```c
+#include <stdio.h>
+
+int main() {
+    printf("Hello World.\n");
+    return 0;
+}
+```
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+int fib(int n) {
+	if (n == 0)
+		return 0;
+	if (n == 1)
+		return 1;
+	return fib(n-1) + fib(n-2);
+}
+
+int main(int argc, char **argv) {
+    int n;
+
+    if (argc != 2) {
+      printf("Wrong number of arguments.\n");
+      return 0;
+    }
+
+    n = atoi(argv[1]);
+
+    printf("Fib %d = %d\n", n, fib(n));
+
+    return 0;
+}
+```
+
+```c
+#include <stdio.h>
+int main(int argc, char **argv) {
+    int n;
+    scanf("%d", &n);
+    printf("Read: %d\n", n);
+    return 0;
 }
 ```
