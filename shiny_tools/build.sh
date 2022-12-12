@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 source shiny_tools/source.sh
 
 echo "Building kernel..." &&
