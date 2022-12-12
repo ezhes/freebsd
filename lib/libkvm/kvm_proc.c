@@ -333,7 +333,7 @@ nopgrp:
 		 * this field.
 		 */
 #define		pmap_resident_count(pm) ((pm)->pm_stats.resident_count)
-		kp->ki_rssize = pmap_resident_count(&vmspace.vm_pmap);
+		kp->ki_rssize = pmap_resident_count(vmspace.vm_pmap);
 		kp->ki_swrss = vmspace.vm_swrss;
 		kp->ki_tsize = vmspace.vm_tsize;
 		kp->ki_dsize = vmspace.vm_dsize;

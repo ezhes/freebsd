@@ -281,7 +281,7 @@ efi_enter(void)
 	if (efi_runtime == NULL)
 		return (ENXIO);
 	td = curthread;
-	curpmap = &td->td_proc->p_vmspace->vm_pmap;
+	curpmap = td->td_proc->p_vmspace->vm_pmap;
 	PMAP_LOCK(curpmap);
 	mtx_lock(&efi_lock);
 	fpu_kern_enter(td, NULL, FPU_KERN_NOCTX);
@@ -302,7 +302,7 @@ efi_leave(void)
 
 	efi_arch_leave();
 
-	curpmap = &curproc->p_vmspace->vm_pmap;
+	curpmap = curproc->p_vmspace->vm_pmap;
 	td = curthread;
 	fpu_kern_leave(td, NULL);
 	mtx_unlock(&efi_lock);

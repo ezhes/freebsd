@@ -44,41 +44,41 @@ struct secure_memory_heap pmap_heap;
 static void
 configure_watchpoints_smp(void *aux) {
     printf(TAG "go for watchpoint config on CPU %d\n", curcpu);
-    critical_enter();
-    zm_init_watchpoint_config_s configs[4] = {
-        /* ZONE_STATE_PMAP */
-        {
-            .wcr = DBGWCR_MASK_X(0b11111LU)
-                    | DBGWCR_LSC_ST
-                    | DBGWCR_PAC_EL1
-                    | DBGWCR_EN,
-            /* 
-            We stuff the secure PCPU pointer in the breakpoint because it
-            keeps us from having to locate and authenticate it manually (yay
-            speed!). This is fine because the mask for the watchpoint ignores
-            all of these bits as the PCPU pointer is obviously under the
-            watchpoint. Since the wvr write gets unmapped later, these registers
-            are safe and durable.
-            */
-            .wvr = (u_int64_t)(zm_pcpus + curcpu)
-        },
-        {
-            .wcr = 0,
-            .wvr = 0
-        },
-        {
-            .wcr = 0,
-            .wvr = 0
-        },
-        {
-            .wcr = 0,
-            .wvr = 0
-        },
-    };
+    // critical_enter();
+    // zm_init_watchpoint_config_s configs[4] = {
+    //     /* ZONE_STATE_PMAP */
+    //     {
+    //         .wcr = DBGWCR_MASK_X(0b11111LU)
+    //                 | DBGWCR_LSC_ST
+    //                 | DBGWCR_PAC_EL1
+    //                 | DBGWCR_EN,
+    //         /* 
+    //         We stuff the secure PCPU pointer in the breakpoint because it
+    //         keeps us from having to locate and authenticate it manually (yay
+    //         speed!). This is fine because the mask for the watchpoint ignores
+    //         all of these bits as the PCPU pointer is obviously under the
+    //         watchpoint. Since the wvr write gets unmapped later, these registers
+    //         are safe and durable.
+    //         */
+    //         .wvr = (u_int64_t)(zm_pcpus + curcpu)
+    //     },
+    //     {
+    //         .wcr = 0,
+    //         .wvr = 0
+    //     },
+    //     {
+    //         .wcr = 0,
+    //         .wvr = 0
+    //     },
+    //     {
+    //         .wcr = 0,
+    //         .wvr = 0
+    //     },
+    // };
     
-    zm_init_debug(configs);
+    // zm_init_debug(configs);
 
-    critical_exit();
+    // critical_exit();
 }
 
 

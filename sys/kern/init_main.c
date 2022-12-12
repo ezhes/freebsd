@@ -433,6 +433,11 @@ struct sysentvec null_sysvec = {
 	.sv_trap	= NULL,
 };
 
+#include <machine/zone_manager.h>
+#include <sys/secure_memory_heap.h>
+
+extern struct secure_memory_heap pmap_heap;
+
 /*
  * The two following SYSINIT's are proc0 specific glue code.  I am not
  * convinced that they can not be safely combined, but their order of
@@ -594,6 +599,7 @@ proc0_init(void *dummy __unused)
 
 	/* Allocate a prototype map so we have something to fork. */
 	p->p_vmspace = &vmspace0;
+	vmspace0.vm_pmap = smh_calloc(&pmap_heap, sizeof(struct pmap), 1);
 	refcount_init(&vmspace0.vm_refcnt, 1);
 	pmap_pinit0(vmspace_pmap(&vmspace0));
 

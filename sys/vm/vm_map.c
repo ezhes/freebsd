@@ -286,6 +286,11 @@ vm_map_startup(void)
 	    vmspace_zinit, NULL, UMA_ALIGN_PTR, UMA_ZONE_NOFREE);
 }
 
+// #include <machine/zone_manager.h>
+// #include <sys/secure_memory_heap.h>
+
+// extern struct secure_memory_heap pmap_heap;
+// 
 static int
 vmspace_zinit(void *mem, int size, int flags)
 {
@@ -299,7 +304,7 @@ vmspace_zinit(void *mem, int size, int flags)
 	mtx_init(&map->system_mtx, "vm map (system)", NULL,
 	    MTX_DEF | MTX_DUPOK);
 	sx_init(&map->lock, "vm map (user)");
-	PMAP_LOCK_INIT(vmspace_pmap(vm));
+	// PMAP_LOCK_INIT(vmspace_pmap(vm));
 	return (0);
 }
 
@@ -317,6 +322,12 @@ vmspace_zdtor(void *mem, int size, void *arg)
 }
 #endif	/* INVARIANTS */
 
+
+#include <machine/zone_manager.h>
+#include <sys/secure_memory_heap.h>
+
+extern struct secure_memory_heap pmap_heap;
+
 /*
  * Allocate a vmspace structure, including a vm_map and pmap,
  * and initialize those structures.  The refcnt is set to 1.
@@ -327,6 +338,10 @@ vmspace_alloc(vm_offset_t min, vm_offset_t max, pmap_pinit_t pinit)
 	struct vmspace *vm;
 
 	vm = uma_zalloc(vmspace_zone, M_WAITOK);
+	if (vm->vm_pmap == NULL) {
+		vm->vm_pmap = smh_calloc(&pmap_heap, sizeof(struct pmap), 1);
+		PMAP_LOCK_INIT(vmspace_pmap(vm));
+	}
 	KASSERT(vm->vm_map.pmap == NULL, ("vm_map.pmap must be NULL"));
 	if (!pinit(vmspace_pmap(vm))) {
 		uma_zfree(vmspace_zone, vm);
