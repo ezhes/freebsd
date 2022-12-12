@@ -455,3 +455,27 @@ KDB: stack backtrace:
 #16 0xffff0000007cdfd8 at pmap_fault+0x2c
 #17 0xffff0000007d4ce0 at data_abort+0x78
 ```
+
+### test user program
+
+```c
+int fib(int n) {
+	if (n == 0)
+		return 0;
+	if (n == 1)
+		return 1;
+	return fib(n-1) + fib(n-2);
+}
+
+int main() {
+	int *ptr = 0;
+	while (fib(10) == 55) {
+		; // currently even this immediately crashes
+	}
+	if (false) { // correct execution
+		int result = *ptr;
+	}
+  // else, syscall
+	return 0;
+}
+```
