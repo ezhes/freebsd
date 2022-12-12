@@ -1748,6 +1748,9 @@ pmap_abort_ptp(pmap_t pmap, vm_offset_t va, vm_page_t mpte)
 void
 pmap_pinit0(pmap_t pmap)
 {
+	printf("pmap_init0 get called");
+	pmap = smh_calloc(&pmap_heap, sizeof(struct pmap), 1); 
+	pmap->secure_process = secure_process;
 
 	PMAP_LOCK_INIT(pmap);
 	bzero(&pmap->pm_stats, sizeof(pmap->pm_stats));
@@ -1766,7 +1769,7 @@ pmap_pinit0(pmap_t pmap)
 int
 pmap_pinit_stage(pmap_t *pmap, enum pmap_stage stage, int levels, bool secure_process) 
 {
-	*pmap = smh_malloc(&pmap_heap, sizeof(struct pmap)); 
+	*pmap = smh_calloc(&pmap_heap, sizeof(struct pmap), 1); 
 	(*pmap)->secure_process = secure_process;
 
 	vm_page_t m;
