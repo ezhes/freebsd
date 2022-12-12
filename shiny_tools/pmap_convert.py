@@ -249,6 +249,8 @@ if __name__ == "__main__":
 
     # toggles that have dependencies/ may not compile/ run
     pmap_check_toggle = False
+    lock_replace_toggle = True
+    pmap_noobj_allocs_replace_toggle = True
 
     pmapc_backup = 'pmap~.c'
     pmapc_src = 'pmap.c'
@@ -394,77 +396,81 @@ if __name__ == "__main__":
         skipped_cmt += skipped_cmt_of(skip)
     skipped_cmt += '\n'
 
-    pmapc_replaces = [('mtx_lock(', 'mtx_lock_spin('),
-        ('mtx_unlock(', 'mtx_unlock_spin('),
-        ('rw_wlock(', 'rw_wlock_spin('),
-        ('rw_rlock(', 'rw_rlock_spin('),
-        ('cpu_spinwait();', ';')]
+    if lock_replace_toggle:
+        pmapc_replaces = [
+            ('mtx_lock(', 'mtx_lock_spin('),
+            ('mtx_unlock(', 'mtx_unlock_spin('),
+            ('rw_wlock(', 'rw_wlock_spin('),
+            ('rw_rlock(', 'rw_rlock_spin('),
+            ('cpu_spinwait();', ';')
+        ]
 
-    for old, new in pmapc_replaces:
-        pmapc = pmapc.replace(old, new)
+        for old, new in pmapc_replaces:
+            pmapc = pmapc.replace(old, new)
 
-    def scope_call_replace():
-        global pmapc
-        def match_multiline(lines, idx: int, match: str, endmatch_options):
-            maxdelta = 2
-            if match not in lines[idx]:
+    if pmap_noobj_allocs_replace_toggle:
+        def scope_call_replace():
+            global pmapc
+            def match_multiline(lines, idx: int, match: str, endmatch_options):
+                maxdelta = 2
+                if match not in lines[idx]:
+                    return None
+                for endmatch in endmatch_options:
+                    for delta in range(0, maxdelta + 1):
+                        if endmatch in lines[idx + delta]:
+                            return '\n'.join(lines[idx : idx+delta+1]).strip()
+                eee('>2 multiline in:', lines[idx : idx + maxdelta + 1])
                 return None
-            for endmatch in endmatch_options:
-                for delta in range(0, maxdelta + 1):
-                    if endmatch in lines[idx + delta]:
-                        return '\n'.join(lines[idx : idx+delta+1]).strip()
-            eee('>2 multiline in:', lines[idx : idx + maxdelta + 1])
-            return None
-        def get_call_arg(call: str, arg_idx: int):
-            paren_open_idx = call.find('(')
+            def get_call_arg(call: str, arg_idx: int):
+                paren_open_idx = call.find('(')
 
-            for idx, word in enumerate(call[paren_open_idx + 1:-1].split(',')):
-                if idx == arg_idx:
-                    return word.strip()
+                for idx, word in enumerate(call[paren_open_idx + 1:-1].split(',')):
+                    if idx == arg_idx:
+                        return word.strip()
 
-            eee('get_call_arg: failed to find arg_idx', arg_idx, 'in', line)
+                eee('get_call_arg: failed to find arg_idx', arg_idx, 'in', line)
 
-        pmapc_call_replaces = [
-            # NOTE: kmem_malloc replacement requires smh_init to be before pmap_init
-            # ('kmem_malloc(',
-            #     lambda call:
-            #         secure_calloc + get_call_arg(call, 0) + ', 1)'),
-            ('vmem_alloc(',
-                lambda call: '0;\n\t\t\t/*' + call + '*/\n\t\t\tpanic("pmap_map_io_transient_zoned: this should never have been called")'),
-            # NOTE: pmap_grow_kernel_zoned is bypassed because kmem_init causes pmap_grow_kernel_zoned and smh_init can't work before kmem_init
-            ('vm_page_alloc_noobj(',
-                lambda _call: secure_page_alloc_call),
-            ]
-        lines = pmapc.split('\n')
-        for idx in range(len(lines)):
-            for old, get_new in pmapc_call_replaces:
-                if '// in growkernel' in lines[idx]:
-                    continue
-                line = match_multiline(lines, idx, old, [';', '{'])
-                if not line:
-                    continue
-                def eee_context(msg):
-                    eee('call replaces: when doing old', old, msg, 'in line', line)
-                if line.count(old) != 1:
-                    eee_context('multiple olds')
-                _precall, post_old = line.split(old)
+            pmapc_call_replaces = [
+                # NOTE: kmem_malloc replacement requires smh_init to be before pmap_init
+                # ('kmem_malloc(',
+                #     lambda call:
+                #         secure_calloc + get_call_arg(call, 0) + ', 1)'),
+                ('vmem_alloc(',
+                    lambda call: '0;\n\t\t\t/*' + call + '*/\n\t\t\tpanic("pmap_map_io_transient_zoned: this should never have been called")'),
+                # NOTE: pmap_grow_kernel_zoned is bypassed because kmem_init causes pmap_grow_kernel_zoned and smh_init can't work before kmem_init
+                ('vm_page_alloc_noobj(',
+                    lambda _call: secure_page_alloc_call),
+                ]
+            lines = pmapc.split('\n')
+            for idx in range(len(lines)):
+                for old, get_new in pmapc_call_replaces:
+                    if '// in growkernel' in lines[idx]:
+                        continue
+                    line = match_multiline(lines, idx, old, [';', '{'])
+                    if not line:
+                        continue
+                    def eee_context(msg):
+                        eee('call replaces: when doing old', old, msg, 'in line', line)
+                    if line.count(old) != 1:
+                        eee_context('multiple olds')
+                    _precall, post_old = line.split(old)
 
-                open_brackets = 1
-                call, _post_call = None, None
-                for idx, ch in enumerate(post_old):
-                    if ch == '(':
-                        open_brackets += 1
-                    elif ch == ')':
-                        open_brackets -= 1
-                        if open_brackets == 0:
-                            call = old + post_old[:idx + 1]
-                            _post_call = post_old[idx + 1:]
-                            break
-                if open_brackets != 0:
-                    eee_context('failed to find end of call; open_brackets = ' + str(open_brackets))
-                
-                pmapc = pmapc.replace(call, get_new(call))
-    scope_call_replace()
+                    open_brackets = 1
+                    call, _post_call = None, None
+                    for idx, ch in enumerate(post_old):
+                        if ch == '(':
+                            open_brackets += 1
+                        elif ch == ')':
+                            open_brackets -= 1
+                            if open_brackets == 0:
+                                call = old + post_old[:idx + 1]
+                                _post_call = post_old[idx + 1:]
+                                break
+                    if open_brackets != 0:
+                        eee_context('failed to find end of call; open_brackets = ' + str(open_brackets))
+                    
+                    pmapc = pmapc.replace(call, get_new(call))
+        scope_call_replace()
 
     if pmap_check_toggle:
         lines = pmapc.split('\n')
@@ -538,11 +544,13 @@ if __name__ == "__main__":
     with open(pmaph_backup, 'r') as pmaph:
         pmaph = pmaph.read()
     
-    pmaph_replaces = [('mtx_lock(', 'mtx_lock_spin('),
-        ('mtx_unlock(', 'mtx_unlock_spin('),
+    if lock_replace_toggle:
+        pmaph_replaces = [
+            ('mtx_lock(', 'mtx_lock_spin('),
+            ('mtx_unlock(', 'mtx_unlock_spin('),
         ]
-    for old, new in pmaph_replaces:
-        pmaph = pmaph.replace(old, new)
+        for old, new in pmaph_replaces:
+            pmaph = pmaph.replace(old, new)
 
     with open(pmaph_dest, 'w') as dest:
         dest.write(pmaph)
