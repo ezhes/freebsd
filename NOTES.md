@@ -525,3 +525,36 @@ int main(int argc, char **argv) {
     return 0;
 }
 ```
+
+```c
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
+
+int main(int argc, char **argv) {
+  if (argc != 2) {
+    printf("Wrong number of arguments.\n");
+    return 0;
+  }
+  int loop = 0; // have an infinite loop
+  do {
+    char *fname = argv[1];
+    int fd = open(fname, O_RDONLY);
+    printf("Opened.\n");
+    int read_cnt = 0;
+    int remaining = 100;
+    char *str = calloc(sizeof(char), 4096);
+    printf("Allocated.\n");
+
+    while ((read_cnt = read(fd, str, remaining)) > 0) {
+      remaining -= read_cnt;
+    }
+    printf("Finished reading.\n");
+    str[remaining - 1] = '\0';
+    printf("Read: \"%s\".\n", str);
+  } while (loop);
+
+  return 0;
+}
+```

@@ -1213,6 +1213,10 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 			vm_object_deallocate(obj);
 			return (vm_mmap_to_errno(error));
 		}
+		if (zm_secure) {
+			pmap_change_prot(PHYS_TO_DMAP(pmap_kextract(sv->sv_shared_page_base)),
+				sv->sv_shared_page_len, VM_PROT_READ);
+		}
 	}
 
 	return (0);

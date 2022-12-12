@@ -510,7 +510,7 @@ static __inline void
 pmap_secure_user(pmap_t pmap, vm_paddr_t pa)
 {
 	if (pmap->secure_process) {
-		va = PHYS_TO_DMAP(pa);
+		vm_offset_t va = PHYS_TO_DMAP(pa);
 		if (va >= VM_MIN_KERNEL_ADDRESS) {
 			PMAP_LOCK(kernel_pmap);
 			pmap_change_props_locked(va, PAGE_SIZE, VM_PROT_READ, -1, false, true);
@@ -523,7 +523,7 @@ pmap_secure_user(pmap_t pmap, vm_paddr_t pa)
 static __inline void pmap_undo_secure_user(pmap_t pmap, vm_paddr_t pa, vm_size_t size)
 {
 	if (pmap->secure_process) {
-		va = PHYS_TO_DMAP(pa);
+		vm_offset_t va = PHYS_TO_DMAP(pa);
 		if (va >= VM_MIN_KERNEL_ADDRESS) {
 			PMAP_LOCK(kernel_pmap);
 			pmap_change_props_locked(va, size, VM_PROT_ALL, -1, false, true);
@@ -6294,9 +6294,9 @@ pmap_change_props_locked(vm_offset_t va, vm_size_t size, vm_prot_t prot,
 			 * on this in ddb & dtrace to insert breakpoint
 			 * instructions.
 			 */
-			if (!override_dmap_write) {
-				prot |= VM_PROT_WRITE;
-			}
+			// if (!override_dmap_write) {
+			// 	prot |= VM_PROT_WRITE;
+			// }
 		}
 
 		if ((prot & VM_PROT_WRITE) == 0) {
