@@ -249,7 +249,7 @@ if __name__ == "__main__":
 
     # toggles that have dependencies/ may not compile/ run
     pmap_check_toggle = False
-    lock_replace_toggle = 
+    lock_replace_toggle = True
     pmap_noobj_allocs_replace_toggle = True
 
     pmapc_backup = 'pmap~.c'
