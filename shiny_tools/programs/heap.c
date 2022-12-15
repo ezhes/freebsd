@@ -2,33 +2,39 @@
 #include <stdlib.h>
 #include <time.h>
 
-/*
-* For testing stack. Use: ./fib <number> Example: ./fib 40
-*/
+int heap_operation() {
+    // Allocate an array on the heap
+    int* array = malloc(10 * sizeof(int));
 
-int fib(int n) {
-    if (n == 0)
-        return 0;
-    if (n == 1)
-        return 1;
-    return fib(n-1) + fib(n - 2);
+    if (array == NULL) {
+        // Handle error
+    }
+
+    // Initialize the array with some values
+    for (int i = 0; i < 10; i++) {
+        array[i] = i * i;
+    }
+
+    // Print the values of the array
+    for (int i = 0; i < 10; i++) {
+        printf("%d ", array[i]);
+    }
+    printf("\n");
+
+    // Free the memory allocated for the array
+    free(array);
+
+    return 0;
 }
 
-int main(int argc, char **argv) {
-    int n;
-    if (argc != 2) {
-        printf("Wrong number of arguments.\n");
-        return 0;
-    }
-    n = atoi(argv[1]);
-
+int main() {
     int exe_times = 100; // adjusting how many times for the for loop here
     double total_time = 0; 
     for (int i = 0; i < exe_times; i++) {
         clock_t start, end;
         double execution_time;
         start = clock();
-        printf("Fib %d = %d\n", n, fib(n));
+        heap_operation();
         end = clock();
         double duration = ((double)end - start)/CLOCKS_PER_SEC;
         printf("Time taken to execute in seconds: %f\n", duration);

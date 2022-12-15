@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h> // For exit()
 #include <time.h>
+
+/*
+* For testing file system access overhead. 
+*/
   
 int file_operation()
 {
@@ -31,7 +35,7 @@ int file_operation()
 }
 
 int main() {
-    int exe_times = 50; // adjusting how many times for the for loop here
+    int exe_times = 100; // adjusting how many times for the for loop here
     double total_time = 0; 
     for (int i = 0; i < exe_times; i++) {
         clock_t start, end;
