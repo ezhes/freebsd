@@ -7,29 +7,27 @@
 * For testing file system access overhead. 
 */
   
-int file_operation()
-{
-    FILE *fptr;
-  
-    char filename[100], c;
+int file_operation() {
+    // Open the file for reading
+    FILE *file = fopen("filename.txt", "r");
 
-    // Open file
-    fptr = fopen("filename.txt", "r");
-    if (fptr == NULL)
-    {
-        printf("Cannot open file \n");
-        exit(0);
+    // Make sure the file was opened successfully
+    if (file == NULL) {
+        printf("Failed to open file\n");
+        return 1;
     }
-  
-    // Read contents from file
-    c = fgetc(fptr);
-    while (c != EOF)
-    {
-        printf ("%c", c);
-        c = fgetc(fptr);
+
+    // Read the contents of the file one character at a time
+    char c;
+    while ((c = fgetc(file)) != EOF) {
+        printf("%c", c);
     }
-  
-    fclose(fptr);
+    // Write some text to the file
+    fprintf(file, "Hello, world!\n");
+    fprintf(file, "This is a sample program.\n");
+
+    // Close the file
+    fclose(file);
 
     return 0;
 }
